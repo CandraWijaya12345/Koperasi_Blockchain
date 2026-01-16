@@ -1,0 +1,65 @@
+/* src/index.css */
+
+/* Reset global */
+* {
+  box-sizing: border-box;
+}
+
+/* Hilangkan margin putih default di sekeliling halaman */
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+/* Background global (samakan dengan admin) */
+body {
+  background-color: #f3f6ff;
+  /* atau warna lain yang kamu pakai di adminStyles.shell */
+}
+
+/* Global button animation */
+.btn-animate {
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+}
+
+.btn-animate:hover {
+  transform: translateY(-2px);
+}
+
+.btn-animate:active {
+  transform: scale(0.95) translateY(0);
+}
+
+/* POPUP ANIMATION */
+@keyframes popupEnter {
+  0% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.popup-overlay {
+  animation: fadeIn 0.2s ease-out;
+}
+
+.popup-content {
+  animation: popupEnter 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
