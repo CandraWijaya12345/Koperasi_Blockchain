@@ -40,7 +40,7 @@ const BayarAngsuranForm = ({ onBayar, isLoading }) => {
         onClick={handleSubmit}
         disabled={isLoading || !jumlah}
       >
-        {loading ? '⏳ Memproses...' : 'Bayar Angsuran'}
+        {loading ? 'Memproses...' : 'Bayar Angsuran'}
       </button>
       <InlineMessage message={msg} isError={isError} />
     </>

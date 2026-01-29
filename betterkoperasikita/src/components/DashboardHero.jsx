@@ -2,7 +2,7 @@
 import React from 'react';
 import { layoutStyles as styles } from '../styles/layout';
 
-const DashboardHero = ({ userAccount, nama }) => {
+const DashboardHero = ({ userAccount, nama, isMember }) => {
   const labelNama = nama || 'Anggota';
 
   return (
@@ -25,7 +25,7 @@ const DashboardHero = ({ userAccount, nama }) => {
             {userAccount.substring(userAccount.length - 6)}
           </span>
         </div>
-        <div style={styles.dashboardHeroBubble}>Withdraw Saldo</div>
+        {isMember && <div style={styles.dashboardHeroBubble}>Withdraw Saldo</div>}
       </div>
     </section>
   );

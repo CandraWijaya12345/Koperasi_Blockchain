@@ -9,6 +9,7 @@ import {
 
 import UserPage from './pages/UserPage';
 import AdminPage from './pages/AdminPage';
+import AdminRoute from './routes/AdminRoute';
 import LoanDetailPage from './pages/LoanDetailPage';
 
 function App() {
@@ -19,8 +20,10 @@ function App() {
         <Route path="/" element={<UserPage />} />
         <Route path="/user" element={<UserPage />} />
 
-        {/* Halaman admin (proteksi di dalam AdminPage) */}
-        <Route path="/admin" element={<AdminPage />} />
+        {/* Halaman admin (proteksi via AdminRoute wrapper) */}
+        <Route path="/admin" element={<AdminRoute />}>
+          <Route index element={<AdminPage />} />
+        </Route>
 
         {/* Halaman detail pinjaman */}
         <Route path="/pinjaman/detail" element={<LoanDetailPage />} />

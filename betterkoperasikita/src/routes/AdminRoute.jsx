@@ -23,9 +23,9 @@ const AdminRoute = () => {
     return <Outlet />;
   }
 
-  // Kalau sudah connect tapi BUKAN pengurus -> tendang ke "/"
+  // Biarkan `AdminPage` yang menampilkan UI ketika akun tidak punya akses
   if (!isPengurus) {
-    return <Navigate to="/" replace />;
+    return <Outlet />;
   }
 
   // Sudah connect & pengurus -> boleh akses child route (/admin)

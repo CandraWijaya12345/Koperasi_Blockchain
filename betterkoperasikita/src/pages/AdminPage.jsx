@@ -38,7 +38,7 @@ const SearchIcon = () => (
 );
 
 const AdminPage = () => {
-  const { account, isConnecting, connectWallet, error: walletError } = useWallet();
+  const { account, isConnecting, connectWallet, disconnectWallet, error: walletError } = useWallet();
 
   const {
     message,
@@ -58,6 +58,7 @@ const AdminPage = () => {
     adminStats,
     shuHistory,
     bagikanSHU,
+    allSimpananLogs,
     emergencyWithdraw
   } = useKoperasi(account);
 
@@ -67,7 +68,8 @@ const AdminPage = () => {
   // ===============================
   // PROTEKSI AKSES ADMIN
   // ===============================
-  if (!account || !isPengurus) {
+  // Jika belum connect -> tampilkan UI connect (sama seperti sebelumnya)
+  if (!account) {
     return (
       <div style={{ ...layout.pageWrapper, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
         <div style={{ textAlign: 'center', background: 'white', padding: '40px', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
@@ -93,6 +95,53 @@ const AdminPage = () => {
           >
             {isConnecting ? 'Verifying...' : 'Connect Wallet'}
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Jika sudah connect tetapi bukan pengurus -> tampilkan notifikasi akses ditolak (tetap gunakan UI yang sama)
+  if (account && !isPengurus) {
+    return (
+      <div style={{ ...layout.pageWrapper, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
+        <div style={{ textAlign: 'center', background: 'white', padding: '40px', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🛡️</div>
+          <h2 style={{ marginBottom: 12, color: '#0f172a' }}>Akses Ditolak</h2>
+          <p style={{ marginBottom: 8, color: '#64748b' }}>
+            Akun <span style={{ fontFamily: 'monospace' }}>{account}</span> tidak memiliki akses admin.
+          </p>
+          <p style={{ marginBottom: 24, color: '#64748b' }}>
+            Silakan hubungkan akun pengurus atau disconnect dan gunakan akun lain.
+          </p>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+            <button
+              onClick={() => { disconnectWallet(); }}
+              style={{
+                padding: '10px 18px',
+                borderRadius: '8px',
+                border: '1px solid #e2e8f0',
+                backgroundColor: '#fff',
+                color: '#0f172a',
+                cursor: 'pointer'
+              }}
+            >
+              Disconnect
+            </button>
+            <button
+              onClick={connectWallet}
+              disabled={isConnecting}
+              style={{
+                padding: '10px 18px',
+                borderRadius: '8px',
+                border: 'none',
+                backgroundColor: '#2563eb',
+                color: '#fff',
+                cursor: 'pointer'
+              }}
+            >
+              {isConnecting ? 'Verifying...' : 'Connect Wallet'}
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -183,6 +232,7 @@ const AdminPage = () => {
                       members={memberList.slice(0, 5)}
                       onMint={mintToken}
                       isLoading={isLoading}
+                      simpananLogs={allSimpananLogs}
                       compact={true}
                     />
                   </div>
@@ -204,14 +254,14 @@ const AdminPage = () => {
             {activeTab === 'anggota' && (
               <div style={styles.pageCard}>
                 <h2 style={styles.pageTitle}>Member Management</h2>
-                <MemberList members={memberList} onMint={mintToken} isLoading={isLoading} />
+                <MemberList members={memberList} onMint={mintToken} isLoading={isLoading} simpananLogs={allSimpananLogs} />
               </div>
             )}
 
             {activeTab === 'simpanan' && (
               <div style={styles.pageCard}>
                 <h2 style={styles.pageTitle}>Savings Overview</h2>
-                <MemberList members={memberList} onMint={mintToken} isLoading={isLoading} />
+                <MemberList members={memberList} onMint={mintToken} isLoading={isLoading} simpananLogs={allSimpananLogs} />
               </div>
             )}
 

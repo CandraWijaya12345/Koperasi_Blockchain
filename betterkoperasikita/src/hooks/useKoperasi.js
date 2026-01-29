@@ -304,9 +304,38 @@ export const useKoperasi = (account) => {
       }));
 
       historyWithTime.sort((a, b) => b.timestamp - a.timestamp);
+      historyWithTime.sort((a, b) => b.timestamp - a.timestamp);
       setShuHistory(historyWithTime);
     } catch (e) {
       console.error("Gagal fetch history SHU:", e);
+    }
+  };
+
+  // --- ADMIN: Simpanan Wajib Monitoring ---
+  const [allSimpananLogs, setAllSimpananLogs] = useState([]);
+
+  const fetchAllSimpananLogs = async (kop) => {
+    if (!kop) return;
+    try {
+      const filter = kop.filters.SimpananMasuk(null);
+      const logs = await kop.queryFilter(filter, 0, 'latest');
+
+      const enhanced = await Promise.all(logs.map(async (l) => {
+        let ts = 0;
+        if (l.args.waktu) ts = Number(l.args.waktu);
+        else {
+          try { const b = await l.getBlock(); ts = b.timestamp; } catch { ts = 0; }
+        }
+        return {
+          dari: l.args.dari,
+          jenis: l.args.jenisSimpanan, // or l.args[2]
+          jumlah: l.args.jumlah,
+          timestamp: ts
+        };
+      }));
+      setAllSimpananLogs(enhanced);
+    } catch (e) {
+      console.error("Gagal fetch all simpanan:", e);
     }
   };
 
@@ -570,6 +599,7 @@ export const useKoperasi = (account) => {
           // Trigger Admin Fetches
           await fetchAllLoansAdmin(kop);
           await fetchAllMembers(kop);
+          await fetchAllSimpananLogs(kop); // New
           await fetchAdminConfig(kop);
           await fetchAdminStats(kop, token);
         }
@@ -630,6 +660,34 @@ export const useKoperasi = (account) => {
       // Gas limit manual untuk cegah estimasi error
       const tx = await koperasiContract.daftarAnggota(nama, { gasLimit: 500000 });
       if (onProgress) onProgress('Menunggu konfirmasi pendaftaran...');
+      await tx.wait();
+
+      await fetchUserData(account, koperasiContract, idrTokenContract);
+      return tx;
+    } catch (err) {
+      console.error(err);
+      throw err;
+    }
+  };
+
+  const setorSimpananWajib = async (onProgress) => {
+    if (!koperasiContract) throw new Error("Kontrak belum siap");
+
+    try {
+      if (onProgress) onProgress('Mengambil info biaya...');
+      const jumlah = await koperasiContract.SIMPANAN_WAJIB();
+
+      // 1. Cek Saldo User
+      if (onProgress) onProgress('Memeriksa saldo wallet...');
+      await checkBalance(jumlah);
+
+      // 2. Approve
+      const approve = await handleApprove(jumlah, onProgress);
+      if (!approve) throw new Error("Approval gagal");
+
+      if (onProgress) onProgress('Mengirim simpanan wajib...');
+      const tx = await koperasiContract.setorSimpananWajib({ gasLimit: 500000 });
+      if (onProgress) onProgress('Menunggu konfirmasi...');
       await tx.wait();
 
       await fetchUserData(account, koperasiContract, idrTokenContract);
@@ -738,6 +796,38 @@ export const useKoperasi = (account) => {
     }
   };
 
+  const tarikSimpanan = async (jumlahStr, onProgress) => {
+    if (!koperasiContract) throw new Error("Kontrak belum siap");
+
+    try {
+      const jumlah = parseToken(jumlahStr || '0');
+
+      // Validasi basic client side
+      if (anggotaData) {
+        // Simpanan Wajib tidak bisa ditarik sembarangan (logic kontrak)
+        // Simpanan Pokok hanya bisa ditarik saat keluar
+        // Simpanan Sukarela bisa ditarik
+        const sukarela = BigInt(anggotaData.simpananSukarela);
+        if (jumlah > sukarela) {
+          throw new Error(`Saldo Sukarela tidak cukup! Tersedia: ${formatToken(sukarela)}`);
+        }
+      }
+
+      if (onProgress) onProgress('Mengirim permintaan penarikan...');
+      // Panggil fungsi smart contract
+      const tx = await koperasiContract.tarikSimpananSukarela(jumlah, { gasLimit: 500000 });
+
+      if (onProgress) onProgress('Menunggu konfirmasi penarikan...');
+      await tx.wait();
+
+      await fetchUserData(account, koperasiContract, idrTokenContract);
+      return tx;
+    } catch (err) {
+      console.error(err);
+      throw err;
+    }
+  };
+
   const setujuiPinjaman = async (idStr, onProgress) => {
     if (!koperasiContract || !idrTokenContract) throw new Error("Kontrak belum siap");
 
@@ -829,6 +919,8 @@ export const useKoperasi = (account) => {
     pendingLoans,
     mintTesting,
     daftarAnggota,
+    setorSimpananWajib,
+    tarikSimpanan,
     setorSimpananSukarela,
     ajukanPinjaman,
     bayarAngsuran,
@@ -842,6 +934,8 @@ export const useKoperasi = (account) => {
     memberList,
     fetchAllMembers,
     mintToken,
+    allSimpananLogs, // New
+    fetchAllSimpananLogs, // New
 
     // Admin Config & All Loans
     allLoans,

@@ -22,14 +22,6 @@ const Hero = ({ onConnect, isLoading }) => {
           {isLoading ? 'Menghubungkan...' : 'Mulai Sekarang'}
         </button>
       </div>
-
-      <div style={styles.heroImageWrapper}>
-        <img
-          style={styles.heroImage}
-          src="https://images.unsplash.com/photo-1605902711834-8b11c3e3ef41?auto=format&fit=crop&w=1100&q=80"
-          alt="Kegiatan Koperasi"
-        />
-      </div>
     </section>
   );
 };
