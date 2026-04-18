@@ -1,0 +1,5 @@
+export const KOPERASI_CONTRACT_ADDRESS = '0x3E8fcB7872FE2668D7B8E55cDf0708539fEd9484';
+export const IDRTOKEN_CONTRACT_ADDRESS = '0xAea036B9ce21009b2D3E5751d3414826c1Dda6e8';
+export const DEPLOY_BLOCK = 1000000; // Lowered to capture older transactions
+export const POLYGONSCAN_API_KEY = 'Z5Q8D4BH5X9Y4UUBQHA7YCYYKFUSCHYPK3';
+export const POLYGONSCAN_BASE_URL = 'https://api.etherscan.io/v2/api';
