@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { formatToken, formatCurrency } from '../../utils/format';
+import { KOPERASI_CONTRACT_ADDRESS } from '../../utils/constants';
 
 // --- STYLES (Moved to top to avoid Temporal Dead Zone errors) ---
 const styles = {
@@ -48,8 +49,12 @@ const CopyIcon = () => (
 );
 
 // --- MODAL COMPONENT ---
-const MemberDetailModal = ({ member, onClose, allLogs }) => {
+const MemberDetailModal = ({ member, onClose, allLogs, onCloseMembership }) => {
   if (!member) return null;
+
+  const [localMsg, setLocalMsg] = React.useState('');
+  const [localLoading, setLocalLoading] = React.useState(false);
+  const [showConfirm, setShowConfirm] = React.useState(false);
 
   // [FIX] BigInt safety: explicitly convert timestamp to Number during sorting
   // Also filter out any logs that have non-numeric "jumlah" (like system labels)
@@ -147,6 +152,67 @@ const MemberDetailModal = ({ member, onClose, allLogs }) => {
                )}
              </div>
           </div>
+
+          {/* ADMIN ACTION: CLOSE MEMBERSHIP */}
+          <div style={{ marginTop: '32px', paddingTop: '24px', borderTop: '1px solid #f1f5f9' }}>
+            {!showConfirm ? (
+              <button 
+                onClick={() => setShowConfirm(true)}
+                disabled={localLoading}
+                style={{ 
+                  backgroundColor: '#fff', 
+                  border: '1px solid #fee2e2', 
+                  color: '#dc2626', 
+                  padding: '10px 20px', 
+                  borderRadius: '10px', 
+                  fontSize: '0.85rem', 
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px'
+                }}
+              >
+                <span>⚠️</span> Tutup Keanggotaan (Reset Anggota)
+              </button>
+            ) : (
+                <div style={{ backgroundColor: '#fef2f2', padding: '16px', borderRadius: '12px', border: '1px solid #fee2e2' }}>
+                  <p style={{ fontSize: '0.85rem', color: '#991b1b', margin: '0 0 12px 0', fontWeight: '600' }}>
+                    Apakah Anda yakin? Anggota akan dikeluarkan dari sistem dan saldo mereka akan di-reset (Refund blockchain). Ini hanya dilakukan untuk koreksi data atau anggota keluar.
+                  </p>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button 
+                      onClick={async () => {
+                        setLocalLoading(true);
+                        try {
+                          await onCloseMembership(member.address, setLocalMsg);
+                          onClose();
+                        } catch (e) {
+                          setLocalMsg("Gagal: " + e.message);
+                        }
+                        setLocalLoading(false);
+                      }}
+                      style={{ flex: 1, backgroundColor: '#dc2626', color: '#fff', border: 'none', padding: '8px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}
+                    >
+                      {localLoading ? 'Memproses...' : 'Ya, Tutup Sekarang'}
+                    </button>
+                    <button 
+                      onClick={() => setShowConfirm(false)}
+                      style={{ flex: 1, backgroundColor: '#fff', border: '1px solid #e2e8f0', padding: '8px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}
+                    >
+                      Batal
+                    </button>
+                  </div>
+                </div>
+            )}
+            {localMsg && (
+              <div style={{ marginTop: '12px', padding: '10px', backgroundColor: '#f8fafc', borderRadius: '8px', fontSize: '0.8rem', color: '#64748b', textAlign: 'center' }}>
+                {localMsg}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -154,14 +220,17 @@ const MemberDetailModal = ({ member, onClose, allLogs }) => {
 };
 
 // --- MAIN COMPONENT ---
-const MemberList = ({ members, isLoading, simpananLogs, compact }) => {
+const MemberList = ({ members, isLoading, simpananLogs, compact, onCloseMembership }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMember, setSelectedMember] = useState(null);
 
-  const filteredMembers = (members || []).filter(m => 
-    (m.nama || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (m.address || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredMembers = (members || []).filter(m => {
+    // Filter out KOPERASI RESERVE
+    if (m.address.toLowerCase() === KOPERASI_CONTRACT_ADDRESS.toLowerCase()) return false;
+    
+    return (m.nama || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+           (m.address || '').toLowerCase().includes(searchTerm.toLowerCase());
+  });
 
   const checkWajibStatus = (addr) => {
     if (!simpananLogs || !Array.isArray(simpananLogs)) return false;
@@ -169,16 +238,17 @@ const MemberList = ({ members, isLoading, simpananLogs, compact }) => {
     const curMonth = now.getMonth();
     const curYear = now.getFullYear();
 
+    // Now more robust: Checks if any 'Wajib' log exists for this user in the current month
+    // Regardless of the specific amount (handles dynamic billing)
     return simpananLogs.some(l => {
-      const isMatch = l && l.dari && addr && 
-        String(l.dari).toLowerCase() === String(addr).toLowerCase() &&
-        (l.jenis === 'Wajib') &&
-        new Date(Number(l.timestamp || 0) * 1000).getMonth() === curMonth &&
-        new Date(Number(l.timestamp || 0) * 1000).getFullYear() === curYear;
+      if (!l || !l.dari || !addr) return false;
       
-      if (!isMatch) return false;
-      const amount = Number(formatToken(l.jumlah || 0n));
-      return amount === 25000;
+      const isMemberMatch = String(l.dari).toLowerCase() === String(addr).toLowerCase();
+      const isWajibType = String(l.jenis).includes('Wajib');
+      const logDate = new Date(Number(l.timestamp || 0) * 1000);
+      const isCurrentMonth = logDate.getMonth() === curMonth && logDate.getFullYear() === curYear;
+
+      return isMemberMatch && isWajibType && isCurrentMonth;
     });
   };
 
@@ -217,7 +287,8 @@ const MemberList = ({ members, isLoading, simpananLogs, compact }) => {
               <th style={{ ...styles.th, width: '60px' }}>ID</th>
               <th style={styles.th}>Anggota</th>
               {!compact && <th style={styles.th}>Wallet</th>}
-              <th style={styles.th}>Status Iuran</th>
+              <th style={styles.th}>Iuran</th>
+              <th style={styles.th}>Status</th>
               {!compact && <th style={styles.th}>Total Simpanan</th>}
               <th style={{ ...styles.th, textAlign: 'right' }}>Aksi</th>
             </tr>
@@ -226,19 +297,9 @@ const MemberList = ({ members, isLoading, simpananLogs, compact }) => {
             {filteredMembers.length > 0 ? filteredMembers.map((m, idx) => {
               if (!m || !m.address) return null;
               
-              const isPaid = checkWajibStatus(m.address);
-              const POKOK_RAW = 100000n * (10n ** 18n); 
-              let sWajib = m.simpananWajib || 0n;
-              let sPokok = 0n;
-              
-              if (sWajib >= POKOK_RAW) {
-                sPokok = POKOK_RAW;
-                sWajib = sWajib - POKOK_RAW;
-              } else {
-                sPokok = sWajib;
-                sWajib = 0n;
-              }
-              
+              const isPaid = (m.tagihanWajib || 0n) === 0n;
+              const sPokok = m.simpananPokok || 0n;
+              const sWajib = m.simpananWajib || 0n;
               const totalSimpanan = sPokok + sWajib + (m.simpananSukarela || 0n);
 
               return (
@@ -271,9 +332,34 @@ const MemberList = ({ members, isLoading, simpananLogs, compact }) => {
                       backgroundColor: isPaid ? '#dcfce7' : '#fee2e2',
                       color: isPaid ? '#166534' : '#991b1b'
                     }}>
-                      <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: isPaid ? '#22c55e' : '#ef4444' }}></div>
-                      {isPaid ? 'Bulan Ini Lunas' : 'Belum Bayar'}
+                      {isPaid ? 'Lunas' : 'Belum'}
                     </div>
+                  </td>
+                  <td style={styles.td}>
+                    {m.address.toLowerCase() === KOPERASI_CONTRACT_ADDRESS.toLowerCase() ? (
+                      <div style={{
+                        ...styles.statusBadge,
+                        backgroundColor: '#f8fafc',
+                        color: '#475569',
+                        border: '1px solid #e2e8f0'
+                      }}>
+                        <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#94a3b8' }}></div>
+                        SISTEM / RESERVE
+                      </div>
+                    ) : (
+                      <div style={{
+                        ...styles.statusBadge,
+                        backgroundColor: m.status === 1 ? '#dcfce7' : (m.status === 4 ? '#fee2e2' : (m.status === 2 ? '#f1f5f9' : (m.status === 3 ? '#fef3c7' : '#f8fafc'))),
+                        color: m.status === 1 ? '#166534' : (m.status === 4 ? '#b91c1c' : (m.status === 2 ? '#64748b' : (m.status === 3 ? '#92400e' : '#94a3b8'))),
+                        border: m.status === 1 ? '1px solid #bbf7d0' : (m.status === 4 ? '1px solid #fecaca' : (m.status === 2 ? '1px solid #e2e8f0' : (m.status === 3 ? '1px solid #fde68a' : '1px solid #f1f5f9')))
+                      }}>
+                        <div style={{ 
+                          width: '6px', height: '6px', borderRadius: '50%', 
+                          backgroundColor: m.status === 1 ? '#22c55e' : (m.status === 4 ? '#ef4444' : (m.status === 2 ? '#94a3b8' : (m.status === 3 ? '#f59e0b' : '#cbd5e1'))) 
+                        }}></div>
+                        {m.status === 1 ? 'Aktif' : (m.status === 4 ? 'Keluar' : (m.status === 2 ? 'Non-Aktif' : (m.status === 3 ? 'Suspended' : 'Belum Registrasi')))}
+                      </div>
+                    )}
                   </td>
                   {!compact && (
                     <td style={styles.td}>
@@ -307,6 +393,7 @@ const MemberList = ({ members, isLoading, simpananLogs, compact }) => {
           member={selectedMember} 
           onClose={() => setSelectedMember(null)} 
           allLogs={simpananLogs}
+          onCloseMembership={onCloseMembership}
         />
       )}
     </div>

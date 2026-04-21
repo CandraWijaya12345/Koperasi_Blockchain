@@ -8,7 +8,7 @@ const shortText = (text, start = 6, end = 4) => {
   return `${text.slice(0, start)}…${text.slice(-end)}`;
 };
 
-const PendingLoanItem = ({ log, loan, onUseId, onApprove, onReject, loading, onNotify }) => {
+const PendingLoanItem = ({ log, loan, onApprove, onReject, onApproveSurvey, onApproveCommittee, loading, onNotify }) => {
   const data = loan || log;
   if (!data) return null;
 
@@ -16,12 +16,19 @@ const PendingLoanItem = ({ log, loan, onUseId, onApprove, onReject, loading, onN
   const [isActing, setIsActing] = React.useState(false);
   const [confirmAction, setConfirmAction] = React.useState(null);
   const [rejectionReason, setRejectionReason] = React.useState('Syarat tidak lengkap');
+  const [surveyNote, setSurveyNote] = React.useState('');
   const [bankDetails, setBankDetails] = React.useState(null);
 
+  const status = Number(data?.status ?? 0);
+  const id = Number(loan?.id ?? args?.id ?? 0);
+  const peminjam = loan?.peminjam ?? args?.peminjam ?? args?.anggota ?? args?.[1];
+  const jumlah = formatCurrency(formatToken(loan?.jumlahPinjaman ?? args?.jumlah ?? 0));
+  const ts = loan?.extractedTimestamp ?? data?.extractedTimestamp ?? Number(args?.waktu) ?? 0;
+  const waktu = ts ? new Date(ts * 1000).toLocaleString('id-ID') : 'Baru saja';
+
   React.useEffect(() => {
-    if (args.peminjam || args.anggota || args[1]) {
-      const userAddr = args.peminjam || args.anggota || args[1];
-      fetch(`http://localhost:5000/api/loan/details/${userAddr}`)
+    if (peminjam) {
+      fetch(`http://localhost:5000/api/loan/details/${peminjam}`)
         .then(res => res.json())
         .then(data => {
           if (data.success && data.details) {
@@ -30,7 +37,7 @@ const PendingLoanItem = ({ log, loan, onUseId, onApprove, onReject, loading, onN
         })
         .catch(err => console.error("Failed to fetch bank details", err));
     }
-  }, [args]);
+  }, [peminjam]);
 
   const processAction = async (actionFn) => {
     if (!actionFn) return;
@@ -39,9 +46,7 @@ const PendingLoanItem = ({ log, loan, onUseId, onApprove, onReject, loading, onN
 
     try {
       await actionFn(String(id), (msg) => {
-        // If parent provided onNotify, pipe progress there
         if (onNotify) onNotify(msg, false);
-        console.log(msg);
       });
       if (onNotify) onNotify("Aksi berhasil!", false);
     } catch (e) {
@@ -52,73 +57,34 @@ const PendingLoanItem = ({ log, loan, onUseId, onApprove, onReject, loading, onN
     setConfirmAction(null);
   };
 
-  const id = Number(args.id);
-  const peminjam = args.peminjam || args.anggota || args[1];
-  const jumlah = formatCurrency(formatToken(args.jumlah));
-  const ts = data.extractedTimestamp || Number(args.waktu) || 0;
-  const waktu = ts ? new Date(ts * 1000).toLocaleString('id-ID') : 'Baru saja';
+  const statusMap = {
+    0: { text: 'Menunggu Survey', color: '#c2410c', bg: '#fff7ed' },
+    1: { text: 'Menunggu Komite', color: '#1d4ed8', bg: '#eff6ff' },
+    2: { text: 'Siap Dicairkan', color: '#15803d', bg: '#f0fdf4' }
+  };
+  const statusInfo = statusMap[status] || { text: 'Pending', color: '#64748b', bg: '#f1f5f9' };
 
-
-
-  const labelStyle = {
-    fontSize: '0.75rem',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-    color: '#94a3b8',
-    fontWeight: '600',
-    marginBottom: '4px'
+  const getButtonText = () => {
+    if (status === 0) return 'Setujui Survey';
+    if (status === 1) return 'Setujui Komite';
+    return 'Cairkan Dana (Disburse)';
   };
 
-  const valueStyle = {
-    fontSize: '0.95rem',
-    color: '#334155',
-    fontWeight: '600',
-    fontFamily: 'Inter, sans-serif'
-  };
+  const labelStyle = { fontSize: '0.75rem', textTransform: 'uppercase', color: '#94a3b8', fontWeight: '600', marginBottom: '4px' };
+  const valueStyle = { fontSize: '0.95rem', color: '#334155', fontWeight: '600' };
 
   return (
-    <div style={{
-      background: '#fff',
-      borderRadius: '16px',
-      padding: '24px',
-      boxShadow: '0 4px 20px -5px rgba(0,0,0,0.05)',
-      border: '1px solid #f1f5f9',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '20px',
-      transition: 'transform 0.2s, box-shadow 0.2s',
-      cursor: 'default'
-    }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.transform = 'translateY(-2px)';
-        e.currentTarget.style.boxShadow = '0 10px 25px -5px rgba(0,0,0,0.1)';
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = 'translateY(0)';
-        e.currentTarget.style.boxShadow = '0 4px 20px -5px rgba(0,0,0,0.05)';
-      }}
-    >
-      {/* HEADER */}
+    <div style={{ background: '#fff', borderRadius: '16px', padding: '24px', boxShadow: '0 4px 20px -5px rgba(0,0,0,0.05)', border: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', gap: '20px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '16px', borderBottom: '1px solid #f1f5f9' }}>
         <div>
-          <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '500' }}>Loan ID</div>
-          <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0f172a' }}>#{id}</div>
+          <div style={{ fontSize: '0.9rem', color: '#0f172a', fontWeight: '700' }}>Pinjaman #{id}</div>
+          <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>{waktu}</div>
         </div>
-        <span style={{
-          background: '#fff7ed',
-          color: '#c2410c',
-          padding: '6px 12px',
-          borderRadius: '99px',
-          fontSize: '0.75rem',
-          fontWeight: '700',
-          letterSpacing: '0.03em',
-          textTransform: 'uppercase'
-        }}>
-          Menunggu
+        <span style={{ background: statusInfo.bg, color: statusInfo.color, padding: '6px 12px', borderRadius: '99px', fontSize: '0.7rem', fontWeight: '800', textTransform: 'uppercase' }}>
+          {statusInfo.text}
         </span>
       </div>
 
-      {/* BODY */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
         <div>
           <div style={labelStyle}>Peminjam</div>
@@ -127,188 +93,84 @@ const PendingLoanItem = ({ log, loan, onUseId, onApprove, onReject, loading, onN
           </div>
         </div>
         <div style={{ textAlign: 'right' }}>
-          <div style={labelStyle}>Jumlah Pengajuan</div>
-          <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a' }}>
-            {jumlah}
-          </div>
+          <div style={labelStyle}>Jumlah</div>
+          <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0f172a' }}>{jumlah}</div>
         </div>
-
         <div>
-          <div style={labelStyle}>Tujuan Pencairan</div>
-          {bankDetails ? (
-            <div style={valueStyle}>
-              {bankDetails.bank} - {bankDetails.accountNumber}
-            </div>
-          ) : (
-            <div style={{ ...valueStyle, color: '#f59e0b', fontSize: '0.85rem' }}>
-              Manual / Belum Set
-            </div>
-          )}
+          <div style={labelStyle}>Rekening Tujuan</div>
+          <div style={valueStyle}>{bankDetails ? `${bankDetails.bank} - ${bankDetails.accountNumber}` : 'Manual / Belum Set'}</div>
         </div>
-
         <div style={{ textAlign: 'right' }}>
           <div style={labelStyle}>Referensi Tx</div>
-          <a
-            href={`https://amoy.polygonscan.com/tx/${transactionHash}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ ...valueStyle, color: '#3b82f6', textDecoration: 'none', borderBottom: '1px dashed #3b82f6' }}
-          >
+          <a href={`https://amoy.polygonscan.com/tx/${transactionHash}`} target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6', textDecoration: 'none', borderBottom: '1px dashed #3b82f6' }}>
             {shortText(transactionHash, 8, 6)}
           </a>
         </div>
       </div>
 
-      {/* ACTION */}
-      <div style={{ marginTop: 'auto', paddingTop: '16px' }}>
-        {onApprove && onReject ? (
-          confirmAction ? (
-            // CONFIRMATION STATE
-            <div style={{
-              background: confirmAction === 'approve' ? '#ecfdf5' : '#fef2f2',
-              border: `1px solid ${confirmAction === 'approve' ? '#10b981' : '#ef4444'}`,
-              borderRadius: '12px',
-              padding: '12px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '12px',
-              animation: 'fadeIn 0.2s'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                <span style={{
-                  color: confirmAction === 'approve' ? '#065f46' : '#991b1b',
-                  fontWeight: '600',
-                  fontSize: '0.9rem'
-                }}>
-                  {confirmAction === 'approve' ? 'Yakin Setujui?' : 'Yakin Tolak?'}
-                </span>
-              </div>
+      <div style={{ marginTop: '10px' }}>
+        {confirmAction ? (
+          <div style={{ background: confirmAction === 'approve' ? '#f0fdf4' : '#fef2f2', border: `1px solid ${confirmAction === 'approve' ? '#22c55e' : '#ef4444'}`, borderRadius: '12px', padding: '16px' }}>
+            <p style={{ fontWeight: '700', marginBottom: '12px', color: confirmAction === 'approve' ? '#166534' : '#991b1b' }}>
+              {confirmAction === 'approve' ? `Konfirmasi: ${getButtonText()}` : 'Konfirmasi: Tolak Pinjaman'}
+            </p>
+            
+            {confirmAction === 'approve' && status === 0 && (
+              <input 
+                type="text" 
+                placeholder="Tambahkan catatan survey (opsional)..."
+                value={surveyNote}
+                onChange={e => setSurveyNote(e.target.value)}
+                style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', marginBottom: '12px' }}
+              />
+            )}
 
-              {/* Input for Rejection */}
-              {confirmAction === 'reject' && (
-                <div style={{ width: '100%' }}>
-                  <input
-                    type="text"
-                    value={rejectionReason}
-                    onChange={(e) => setRejectionReason(e.target.value)}
-                    placeholder="Alasan penolakan..."
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      borderRadius: '8px',
-                      border: '1px solid #fca5a5',
-                      fontSize: '0.9rem',
-                      outline: 'none',
-                      background: '#fff'
-                    }}
-                  />
-                </div>
-              )}
+            {confirmAction === 'reject' && (
+              <input 
+                type="text" 
+                placeholder="Alasan penolakan..."
+                value={rejectionReason}
+                onChange={e => setRejectionReason(e.target.value)}
+                style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #fca5a5', marginBottom: '12px' }}
+              />
+            )}
 
-              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', width: '100%' }}>
-                <button
-                  onClick={() => {
-                    if (confirmAction === 'reject') {
-                      // Use logic from state
-                      if (!rejectionReason.trim()) {
-                        alert("Mohon isi alasan penolakan!");
-                        return;
-                      }
-                      const rejectWithReason = (id, cb) => onReject(id, rejectionReason, cb);
-                      processAction(rejectWithReason);
-                    } else {
-                      processAction(onApprove);
-                    }
-                  }}
-                  disabled={loading || isActing}
-                  style={{
-                    background: confirmAction === 'approve' ? '#10b981' : '#ef4444',
-                    color: 'white', border: 'none', padding: '6px 16px', borderRadius: '8px',
-                    fontWeight: '600', cursor: 'pointer', fontSize: '0.85rem'
-                  }}
-                >
-                  {isActing ? '...' : `Ya, ${confirmAction === 'approve' ? 'Setujui' : 'Tolak'}`}
-                </button>
-                <button
-                  onClick={() => setConfirmAction(null)}
-                  disabled={loading || isActing}
-                  style={{
-                    background: 'transparent',
-                    color: '#64748b', border: '1px solid #cbd5e1', padding: '6px 16px', borderRadius: '8px',
-                    fontWeight: '600', cursor: 'pointer', fontSize: '0.85rem'
-                  }}
-                >
-                  Batal
-                </button>
-              </div>
-            </div>
-          ) : (
-            // DEFAULT STATE
-            <div style={{ display: 'flex', gap: '12px', width: '100%' }}>
-              <button
-                style={{
-                  flex: 1,
-                  background: '#2563eb', // Professional blue
-                  color: 'white',
-                  border: 'none',
-                  padding: '12px',
-                  borderRadius: '10px',
-                  fontWeight: '600',
-                  cursor: (loading || isActing) ? 'not-allowed' : 'pointer',
-                  opacity: (loading || isActing) ? 0.7 : 1,
-                  transition: 'all 0.2s',
-                  fontSize: '0.9rem',
-                  boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)'
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button 
+                onClick={() => setConfirmAction(null)}
+                style={{ background: '#fff', border: '1px solid #d1d5db', padding: '8px 16px', borderRadius: '8px', fontWeight: '600' }}
+              >Batal</button>
+              <button 
+                disabled={isActing}
+                onClick={() => {
+                  if (confirmAction === 'reject') processAction((idx, cb) => onReject(idx, rejectionReason, cb));
+                  else if (status === 0) processAction((idx, cb) => onApproveSurvey(idx, surveyNote, cb));
+                  else if (status === 1) processAction(onApproveCommittee);
+                  else processAction(onApprove);
                 }}
-                type="button"
-                disabled={loading || isActing}
-                onClick={() => setConfirmAction('approve')}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = '#1d4ed8';
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = '#2563eb';
-                  e.currentTarget.style.transform = 'translateY(0)';
-                }}
+                style={{ background: confirmAction === 'approve' ? '#22c55e' : '#ef4444', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '8px', fontWeight: '700' }}
               >
-                Setujui Pinjaman
-              </button>
-              <button
-                style={{
-                  flex: 1,
-                  background: '#fff',
-                  color: '#ef4444',
-                  border: '1px solid #ef4444',
-                  padding: '12px',
-                  borderRadius: '10px',
-                  fontWeight: '600',
-                  cursor: (loading || isActing) ? 'not-allowed' : 'pointer',
-                  opacity: (loading || isActing) ? 0.7 : 1,
-                  transition: 'background 0.2s',
-                  fontSize: '0.9rem'
-                }}
-                type="button"
-                disabled={loading || isActing}
-                onClick={() => setConfirmAction('reject')}
-                onMouseEnter={e => e.currentTarget.style.background = '#fef2f2'}
-                onMouseLeave={e => e.currentTarget.style.background = '#fff'}
-              >
-                Tolak
+                {isActing ? '...' : 'Konfirmasi'}
               </button>
             </div>
-          )
+          </div>
         ) : (
-          <button
-            style={styles.pendingFillButton}
-            type="button"
-            onClick={() => onUseId && onUseId(String(id))}
-          >
-            Gunakan ID
-          </button>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <button 
+              onClick={() => setConfirmAction('approve')}
+              style={{ flex: 2, background: status === 2 ? '#10b981' : '#2563eb', color: '#fff', border: 'none', padding: '12px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer' }}
+            >
+              {getButtonText()}
+            </button>
+            <button 
+              onClick={() => setConfirmAction('reject')}
+              style={{ flex: 1, background: '#fff', color: '#ef4444', border: '1px solid #ef4444', padding: '12px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer' }}
+            >
+              Tolak
+            </button>
+          </div>
         )}
       </div>
-      <style>{`@keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }`}</style>
     </div>
   );
 };

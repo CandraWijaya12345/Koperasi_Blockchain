@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { formatCurrency } from '../../utils/format';
 import InlineMessage from '../InlineMessage';
-import { IDRTOKEN_CONTRACT_ADDRESS } from '../../utils/constants';
+import { TOKEN_ADDRESS } from '../../utils/constants';
 
 const FundManagement = ({ stats, onWithdraw, onAddLiquidity, onMint, onSync, isLoading }) => {
     const [amount, setAmount] = useState('');
@@ -46,7 +46,7 @@ const FundManagement = ({ stats, onWithdraw, onAddLiquidity, onMint, onSync, isL
         try {
             setMsg('Memproses penarikan...');
             setIsError(false);
-            await onWithdraw(IDRTOKEN_CONTRACT_ADDRESS, amount, (m) => setMsg(m));
+            await onWithdraw(TOKEN_ADDRESS, amount, (m) => setMsg(m));
             setMsg('Penarikan dana berhasil!');
             setAmount('');
         } catch (err) {
@@ -166,6 +166,8 @@ const FundManagement = ({ stats, onWithdraw, onAddLiquidity, onMint, onSync, isL
                 </form>
             </div>
 
+            {/* EMERGENCY WITHDRAWAL - DISABLED AS NOT SUPPORTED BY CONTRACT */}
+            {/* 
             <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
                 <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '16px', color: '#dc2626' }}>Penarikan Darurat (Emergency)</h3>
                 <p style={{ marginBottom: '20px', color: '#4b5563', fontSize: '0.9rem' }}>
@@ -196,6 +198,13 @@ const FundManagement = ({ stats, onWithdraw, onAddLiquidity, onMint, onSync, isL
                         <InlineMessage message={msg} isError={isError} />
                     </div>
                 </form>
+            </div>
+            */}
+
+            <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '16px', border: '1px dashed #cbd5e1', textAlign: 'center' }}>
+                <p style={{ fontSize: '0.85rem', color: '#64748b', margin: 0 }}>
+                    ℹ️ Seluruh penarikan dana anggota diproses secara otomatis melalui integrasi Payout Xendit & Smart Contract.
+                </p>
             </div>
         </div>
     );

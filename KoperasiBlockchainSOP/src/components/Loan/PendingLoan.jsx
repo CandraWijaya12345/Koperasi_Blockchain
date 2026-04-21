@@ -14,12 +14,21 @@ const PendingLoan = ({ pendingLoanUser }) => {
   const ts = pendingLoanUser.extractedTimestamp || Number(args.waktu) || 0;
   const waktu = ts ? new Date(ts * 1000).toLocaleString('id-ID') : '-';
 
+  const status = Number(pendingLoanUser.status || 0);
+  const statusConfig = {
+    0: { label: 'Menunggu Survey', color: '#f59e0b', msg: 'Permintaan Anda sedang dalam antrean penjadwalan survey oleh tim kami.' },
+    1: { label: 'Proses Komite', color: '#6366f1', msg: 'Hasil survey Anda sedang ditinjau oleh Komite Pinjaman untuk keputusan akhir.' },
+    2: { label: 'Disetujui - Antre Pencairan', color: '#10b981', msg: 'Pinjaman Anda telah disetujui! Sedang menunggu proses pencairan dana ke rekening Anda.' }
+  };
+
+  const currentStatus = statusConfig[status] || statusConfig[0];
+
   return (
     <>
       <LoanCard
         id={Number(idVal)}
-        statusLabel="Menunggu persetujuan"
-        statusColor="#f59e0b"
+        statusLabel={currentStatus.label}
+        statusColor={currentStatus.color}
       >
         <div style={styles.loanDetails}>
           <div style={styles.loanDetail}>
@@ -27,14 +36,14 @@ const PendingLoan = ({ pendingLoanUser }) => {
             <span style={styles.loanDetailValue}>{jumlah}</span>
           </div>
           <div style={styles.loanDetail}>
-            <span style={styles.loanDetailLabel}>Status</span>
+            <span style={styles.loanDetailLabel}>Status Saat Ini</span>
             <span
               style={{
                 ...styles.loanDetailValue,
-                color: '#f59e0b',
+                color: currentStatus.color,
               }}
             >
-              Menunggu persetujuan admin
+              {currentStatus.label}
             </span>
           </div>
           <div style={styles.loanDetail}>
@@ -51,10 +60,10 @@ const PendingLoan = ({ pendingLoanUser }) => {
         </div>
       </LoanCard>
 
-      <div style={styles.infoBox}>
+      <div style={{ ...styles.infoBox, backgroundColor: '#f8fafc', borderLeft: `4px solid ${currentStatus.color}` }}>
+        <p style={{ fontWeight: '600', marginBottom: '4px' }}>Update Progress:</p>
         <p>
-          Pengajuan pinjaman Anda sedang direview admin. Anda belum dapat
-          mengajukan pinjaman baru sebelum pengajuan ini diputuskan.
+          {currentStatus.msg}
         </p>
       </div>
     </>

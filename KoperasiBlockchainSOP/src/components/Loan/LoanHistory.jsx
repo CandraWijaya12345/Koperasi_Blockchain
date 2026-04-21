@@ -10,8 +10,10 @@ const LoanHistory = ({ history }) => {
 
     // Grouping events by Loan ID for easier status reporting
     const loansById = {};
-    loanEvents.forEach(log => {
-        const id = Number(log.args.id);
+    // Reverse to process from oldest to newest so status updates correctly
+    [...loanEvents].reverse().forEach(log => {
+        const id = Number(log.args.loanId ?? log.args.id);
+        if (isNaN(id)) return; // Skip if ID is still invalid
         if (!loansById[id]) {
             loansById[id] = {
                 id,

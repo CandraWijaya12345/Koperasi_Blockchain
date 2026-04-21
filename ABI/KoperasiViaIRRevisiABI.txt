@@ -21,24 +21,11 @@
     "inputs": [
       {
         "internalType": "uint256",
-        "name": "_loanId",
+        "name": "_amount",
         "type": "uint256"
       }
     ],
-    "name": "approveCommittee",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_nominal",
-        "type": "uint256"
-      }
-    ],
-    "name": "generateMonthlyBills",
+    "name": "memberWithdraw",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -105,18 +92,24 @@
     "inputs": [
       {
         "indexed": true,
+        "internalType": "uint256",
+        "name": "loanId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
         "internalType": "address",
-        "name": "user",
+        "name": "peminjam",
         "type": "address"
       },
       {
         "indexed": false,
         "internalType": "uint256",
-        "name": "timestamp",
+        "name": "jumlah",
         "type": "uint256"
       }
     ],
-    "name": "AnggotaRejoin",
+    "name": "AngsuranMasuk",
     "type": "event"
   },
   {
@@ -139,10 +132,29 @@
         "internalType": "uint256",
         "name": "jumlah",
         "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "sisa",
+        "type": "uint256"
       }
     ],
-    "name": "AngsuranMasuk",
+    "name": "AngsuranTercatat",
     "type": "event"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_loanId",
+        "type": "uint256"
+      }
+    ],
+    "name": "approveCommittee",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
   },
   {
     "inputs": [
@@ -174,31 +186,6 @@
       {
         "indexed": false,
         "internalType": "uint256",
-        "name": "anggotaTerproses",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "timestamp",
-        "type": "uint256"
-      }
-    ],
-    "name": "BagiHasilBatchDirilis",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "nominalTotal",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
         "name": "timestamp",
         "type": "uint256"
       }
@@ -210,42 +197,11 @@
     "inputs": [
       {
         "internalType": "uint256",
-        "name": "_loanId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_amount",
-        "type": "uint256"
-      }
-    ],
-    "name": "bayarAngsuranInternal",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
         "name": "_amount",
         "type": "uint256"
       }
     ],
     "name": "bayarTagihanWajib",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_index",
-        "type": "uint256"
-      }
-    ],
-    "name": "cairkanSimpananBerjangka",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -358,6 +314,19 @@
     "type": "event"
   },
   {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_nominal",
+        "type": "uint256"
+      }
+    ],
+    "name": "generateMonthlyBills",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
     "anonymous": false,
     "inputs": [
       {
@@ -426,19 +395,6 @@
         "internalType": "uint256",
         "name": "_amount",
         "type": "uint256"
-      }
-    ],
-    "name": "memberWithdraw",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_amount",
-        "type": "uint256"
       },
       {
         "internalType": "uint256",
@@ -493,25 +449,6 @@
       }
     ],
     "name": "PenarikanTercatat",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "admin",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "timestamp",
-        "type": "uint256"
-      }
-    ],
-    "name": "PengurusDitambahkan",
     "type": "event"
   },
   {
@@ -811,34 +748,6 @@
     "inputs": [
       {
         "internalType": "uint256",
-        "name": "_totalAmountToDistribute",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_totalSimpananSnapshot",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_startIndex",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_count",
-        "type": "uint256"
-      }
-    ],
-    "name": "rilisBagiHasilBatch",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
         "name": "_persenTahunan",
         "type": "uint256"
       }
@@ -880,31 +789,6 @@
       {
         "indexed": true,
         "internalType": "address",
-        "name": "user",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "jumlah",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "timestamp",
-        "type": "uint256"
-      }
-    ],
-    "name": "SHUDiterima",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
         "name": "admin",
         "type": "address"
       },
@@ -930,68 +814,6 @@
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "user",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "amount",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "tenorBulan",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "timestamp",
-        "type": "uint256"
-      }
-    ],
-    "name": "SimpananBerjangkaDibuka",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "user",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "amount",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "bunga",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "timestamp",
-        "type": "uint256"
-      }
-    ],
-    "name": "SimpananBerjangkaDicairkan",
-    "type": "event"
   },
   {
     "anonymous": false,
@@ -1409,247 +1231,6 @@
   {
     "inputs": [],
     "name": "dendaHarianPermil",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "getAllMembers",
-    "outputs": [
-      {
-        "internalType": "address[]",
-        "name": "addresses",
-        "type": "address[]"
-      },
-      {
-        "components": [
-          {
-            "internalType": "bool",
-            "name": "terdaftar",
-            "type": "bool"
-          },
-          {
-            "internalType": "enum KoperasiSimpanPinjam.MemberStatus",
-            "name": "status",
-            "type": "uint8"
-          },
-          {
-            "internalType": "string",
-            "name": "nama",
-            "type": "string"
-          },
-          {
-            "internalType": "string",
-            "name": "noHP",
-            "type": "string"
-          },
-          {
-            "internalType": "string",
-            "name": "noKTP",
-            "type": "string"
-          },
-          {
-            "internalType": "string",
-            "name": "alamat",
-            "type": "string"
-          },
-          {
-            "internalType": "string",
-            "name": "jenisKelamin",
-            "type": "string"
-          },
-          {
-            "internalType": "string",
-            "name": "pekerjaan",
-            "type": "string"
-          },
-          {
-            "internalType": "string",
-            "name": "kontakDarurat",
-            "type": "string"
-          },
-          {
-            "internalType": "uint256",
-            "name": "simpananPokok",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "simpananWajib",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "simpananSukarela",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "shuSudahDiambil",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "branchID",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "limitPinjaman",
-            "type": "uint256"
-          }
-        ],
-        "internalType": "struct KoperasiSimpanPinjam.Anggota[]",
-        "name": "members",
-        "type": "tuple[]"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_user",
-        "type": "address"
-      }
-    ],
-    "name": "getAllSimpananBerjangka",
-    "outputs": [
-      {
-        "components": [
-          {
-            "internalType": "uint256",
-            "name": "amount",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "lockUntil",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "interestRate",
-            "type": "uint256"
-          },
-          {
-            "internalType": "bool",
-            "name": "active",
-            "type": "bool"
-          }
-        ],
-        "internalType": "struct KoperasiSimpanPinjam.SimpananBerjangka[]",
-        "name": "",
-        "type": "tuple[]"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_start",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_count",
-        "type": "uint256"
-      }
-    ],
-    "name": "getLoansBatch",
-    "outputs": [
-      {
-        "components": [
-          {
-            "internalType": "uint256",
-            "name": "id",
-            "type": "uint256"
-          },
-          {
-            "internalType": "address",
-            "name": "peminjam",
-            "type": "address"
-          },
-          {
-            "internalType": "uint256",
-            "name": "jumlahPinjaman",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "totalHarusDibayar",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "sudahDibayar",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "tenorBulan",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "waktuJatuhTempo",
-            "type": "uint256"
-          },
-          {
-            "internalType": "enum KoperasiSimpanPinjam.StatusPinjaman",
-            "name": "status",
-            "type": "uint8"
-          },
-          {
-            "internalType": "enum KoperasiSimpanPinjam.Kolektibilitas",
-            "name": "quality",
-            "type": "uint8"
-          },
-          {
-            "internalType": "bool",
-            "name": "isRestructured",
-            "type": "bool"
-          },
-          {
-            "internalType": "string",
-            "name": "surveyNote",
-            "type": "string"
-          },
-          {
-            "internalType": "address",
-            "name": "approvedByCommittee",
-            "type": "address"
-          }
-        ],
-        "internalType": "struct KoperasiSimpanPinjam.Pinjaman[]",
-        "name": "",
-        "type": "tuple[]"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_user",
-        "type": "address"
-      }
-    ],
-    "name": "getSimpananBerjangkaLength",
     "outputs": [
       {
         "internalType": "uint256",

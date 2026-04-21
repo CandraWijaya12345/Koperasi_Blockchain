@@ -11,8 +11,8 @@ const AjukanPinjamanForm = ({ onAjukan, isLoading, maxLimit, adminConfig }) => {
   const [showWarning, setShowWarning] = useState(false);
 
   // Defensive parsing
-  const bunga = adminConfig?.bunga || 2;
-  const denda = adminConfig?.denda ? adminConfig.denda / 10 : 0.5;
+  const bungaRate = adminConfig?.bungaPinjaman || 12;
+  const dendaRate = adminConfig?.denda || 1;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -41,11 +41,11 @@ const AjukanPinjamanForm = ({ onAjukan, isLoading, maxLimit, adminConfig }) => {
     }
   };
 
-  // Calculation Logic
+  // Calculation Logic: (Amount * Rate/100 * Tenor) / 12
   const amountVal = parseFloat(amount) || 0;
   const tenorVal = parseInt(tenor) || 12;
 
-  const totalBunga = (amountVal * (bunga / 100)) * tenorVal;
+  const totalBunga = (amountVal * (bungaRate / 100) * tenorVal) / 12;
   const totalBayar = amountVal + totalBunga;
   const cicilanPerBulan = totalBayar / tenorVal;
 
@@ -65,11 +65,11 @@ const AjukanPinjamanForm = ({ onAjukan, isLoading, maxLimit, adminConfig }) => {
       </h3>
 
       <div style={{ background: '#f1f5f9', padding: '16px', borderRadius: '8px', marginBottom: '20px' }}>
-        <p style={{ margin: 0, fontWeight: 600, color: '#334155' }}>Info Bunga & Denda:</p>
+        <p style={{ margin: 0, fontWeight: 600, color: '#334155' }}>Info Parameter Pinjaman:</p>
         <ul style={{ margin: '8px 0 0 20px', color: '#475569', fontSize: '0.9rem' }}>
-          <li>Bunga: <b>{bunga}% per bulan</b></li>
-          <li>Denda: <b>{denda}% per hari</b></li>
-          <li>Maksimal: 3x Simpanan</li>
+          <li>Suku Bunga: <b>{bungaRate}% per tahun</b></li>
+          <li>Denda Harian: <b>{dendaRate}‰ (permil)</b></li>
+          <li>Limit Maksimal: 3x Total Simpanan</li>
         </ul>
       </div>
 

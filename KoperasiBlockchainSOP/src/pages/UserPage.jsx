@@ -14,6 +14,8 @@ import LoanHistory from '../components/Loan/LoanHistory';
 import HistoryList from '../components/HistoryList';
 import PaymentOverlay from '../components/PaymentOverlay';
 import SuccessModal from '../components/SuccessModal';
+import SimpananBerjangkaForm from '../components/Forms/SimpananBerjangkaForm';
+import VerificationOverlay from '../components/VerificationOverlay';
 
 import { useWallet } from '../hooks/useWallet';
 import { useKoperasi } from '../hooks/useKoperasi';
@@ -48,16 +50,19 @@ const UserPage = () => {
     ajukanPinjaman,
     bayarAngsuran,
     refresh,
-    simpananWajib,
-    simpananSukarela,
     tarikSimpanan,
-    adminConfig,
     isPaymentLocked,
     paymentSuccess,
+    cancelPayment,
+    bayarSimpananWajibInternal,
+    adminConfig,
+    userTimeDeposits,
+    openSimpananBerjangka,
+    cairkanSimpananBerjangka,
+    triggerTripleSync,
     setPaymentSuccess,
     isPengurus,
-    paymentType,
-    cancelPayment
+    paymentType
   } = useKoperasi(account);
 
   // [BARU] States for Iframe Payment Modal
@@ -97,6 +102,9 @@ const UserPage = () => {
       }
     }, 100);
   };
+
+  // [BARU] Logic to detect if user is in "Waiting for Blockchain Activation" state
+  const isActivating = !anggotaData?.terdaftar && isPaymentLocked && (paymentType === 'simpanan' || paymentType === 'POKOK');
 
   const globalMessage = walletError || message;
 
@@ -218,6 +226,12 @@ const UserPage = () => {
         onNavigate={setActiveTab}
       />
 
+      {/* GLOBAL LOADING / SYNCING OVERLAY */}
+      <VerificationOverlay 
+        isVisible={(isPaymentLocked && !showIframe) || isLoading} 
+        message={isPaymentLocked ? "Memverifikasi Pembayaran Anda..." : "Sedang Memproses di Blockchain..."}
+      />
+
       {globalMessage && (
         <div style={layout.messageWrapper}>
           <div style={layout.messageBanner}>
@@ -240,12 +254,12 @@ const UserPage = () => {
           <>
             <DashboardHero
               userAccount={account}
-              nama={anggotaData?.terdaftar ? anggotaData.nama : "Calon Anggota"}
-              isMember={!!anggotaData?.terdaftar}
+              nama={(anggotaData?.terdaftar && anggotaData?.status === 1) ? anggotaData.nama : (anggotaData?.status === 4 ? "Mantan Anggota" : "Calon Anggota")}
+              isMember={anggotaData?.terdaftar && anggotaData?.status === 1}
               onWithdraw={handleWithdrawClick}
             />
 
-            {anggotaData?.terdaftar && (
+            {anggotaData?.terdaftar && anggotaData?.status === 1 && (
               <div style={styles.grid}>
                 <div style={styles.card}>
                   <div>
@@ -321,27 +335,55 @@ const UserPage = () => {
               </div>
             )}
 
-            {!anggotaData?.terdaftar && (
+            {/* [BARU] OVERLAY AKTIVASI: Tampil jika sudah bayar tapi blockchain belum konfirmasi */}
+            {isActivating && (
+                <div style={{
+                    ...styles.card,
+                    textAlign: 'center',
+                    padding: '60px 40px',
+                    border: '2px dashed #3b82f6',
+                    backgroundColor: '#eff6ff',
+                    animation: 'pulse 2s infinite'
+                }}>
+                    <div style={{ marginBottom: '20px' }}>
+                        <svg className="animate-spin" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                        </svg>
+                    </div>
+                    <h3 style={{ fontSize: '1.5rem', fontWeight: '800', color: '#1e40af', marginBottom: '12px' }}>
+                        Sedang Mengaktifkan Akun...
+                    </h3>
+                    <p style={{ color: '#64748b', fontSize: '1rem', maxWidth: '500px', margin: '0 auto' }}>
+                        Pembayaran Anda telah diterima. Kami sedang mendaftarkan identitas Anda ke jaringan blockchain Polygon. 
+                        <b> Mohon jangan tutup atau refresh halaman ini</b>, dashboard akan tampil otomatis sebentar lagi.
+                    </p>
+                </div>
+            )}
+
+            {(!anggotaData?.terdaftar || anggotaData?.status === 4) && !isLoading && !isActivating && (
               <RegisterForm 
                 onRegister={(...args) => handlePaymentTrigger(daftarAnggota, ...args)} 
                 isLoading={isLoading} 
                 isPaymentLocked={isPaymentLocked}
                 paymentSuccess={paymentSuccess}
+                userAddress={account}
+                adminConfig={adminConfig}
               />
             )}
 
-            {anggotaData?.terdaftar && (
+            {anggotaData?.terdaftar && anggotaData?.status === 1 && (
               <>
                 <Tabs activeTab={activeTab} onChange={setActiveTab} />
 
                 {activeTab === "simpanan" && (
                   <>
                     <SimpananWajibForm
-                      history={history}
+                      anggotaData={anggotaData}
                       isLoading={isLoading}
                       isPaymentLocked={isPaymentLocked}
                       paymentSuccess={paymentSuccess}
                       onPay={(...args) => handlePaymentTrigger(setorSimpananWajib, ...args)}
+                      onPayInternal={(...args) => handlePaymentTrigger(bayarSimpananWajibInternal, ...args)}
                     />
 
                     <SimpananForm
@@ -360,6 +402,18 @@ const UserPage = () => {
                       />
                     </div>
                   </>
+                )}
+
+                {activeTab === "berjangka" && (
+                  <SimpananBerjangkaForm
+                    userTimeDeposits={userTimeDeposits}
+                    anggotaData={anggotaData}
+                    idrtBalance={idrtBalance}
+                    onOpen={openSimpananBerjangka}
+                    onCair={cairkanSimpananBerjangka}
+                    isLoading={isLoading}
+                    annualInterestRate={adminConfig?.bunga || 5}
+                  />
                 )}
 
                 {activeTab === "pinjaman" && (
@@ -467,7 +521,11 @@ const UserPage = () => {
 
       <SuccessModal 
         isVisible={paymentSuccess} 
-        onClose={() => setPaymentSuccess(false)} 
+        onClose={() => {
+          setPaymentSuccess(false);
+          // [FIX] Auto-Refresh browser for total data consistency
+          window.location.reload();
+        }} 
         type={paymentType}
       />
     </div>

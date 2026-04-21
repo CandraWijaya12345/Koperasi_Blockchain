@@ -2,8 +2,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { ethers } from 'ethers';
 import {
-  KOPERASI_CONTRACT_ADDRESS,
-  IDRTOKEN_CONTRACT_ADDRESS,
+  CONTRACT_ADDRESS,
+  TOKEN_ADDRESS,
   DEPLOY_BLOCK,
   POLYGONSCAN_API_KEY,
   POLYGONSCAN_BASE_URL
@@ -15,6 +15,12 @@ import IDRTokenABI from '../abi/idrtokenbaru.json';
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+// [FIX] Polygon Amoy Gas Overrides (Min 25 Gwei Priority Fee needed)
+const POLYGON_GAS_OPTIONS = {
+  maxPriorityFeePerGas: ethers.parseUnits('35', 'gwei'),
+  maxFeePerGas: ethers.parseUnits('50', 'gwei')
+};
+
 const fetchLogsViaScanner = async (kop, filter, startBlock, retryCount = 0) => {
   try {
     if (!POLYGONSCAN_API_KEY || POLYGONSCAN_API_KEY === 'YOUR_API_KEY') {
@@ -22,7 +28,7 @@ const fetchLogsViaScanner = async (kop, filter, startBlock, retryCount = 0) => {
       return await fetchLogsChunked(kop, filter, startBlock);
     }
 
-    const address = KOPERASI_CONTRACT_ADDRESS;
+    const address = CONTRACT_ADDRESS;
     let url = `${POLYGONSCAN_BASE_URL}?chainid=80002&module=logs&action=getLogs&fromBlock=${startBlock}&toBlock=latest&address=${address}&apikey=${POLYGONSCAN_API_KEY}`;
 
     // Jika filter spesifik (bukan wildcard "*"), tambahkan topic0 agar hasil lebih akurat
@@ -34,8 +40,8 @@ const fetchLogsViaScanner = async (kop, filter, startBlock, retryCount = 0) => {
     const data = await response.json();
 
     if (data.status !== '1') {
-      // Jika "No logs found", kembalikan array kosong, jangan error
-      if (data.message === "No logs found") return [];
+      // Jika "No logs/records found", kembalikan array kosong, jangan error
+      if (data.message === "No logs found" || data.message === "No records found") return [];
 
       // Handle Rate Limit (Max 5 req/sec)
       if (data.result && data.result.includes("rate limit") && retryCount < 2) {
@@ -142,10 +148,11 @@ export const useKoperasi = (account) => {
   const [pendingLoanUser, setPendingLoanUser] = useState(null);
   const [pendingLoans, setPendingLoans] = useState([]);
   const [approvedTodayCount, setApprovedTodayCount] = useState(0);
+  const [userTimeDeposits, setUserTimeDeposits] = useState([]);
 
   // Admin Data
   const [allLoans, setAllLoans] = useState({ pending: [], active: [], paid: [], rejected: [] });
-  const [adminConfig, setAdminConfig] = useState({ bunga: 0, denda: 0 });
+  const [adminConfig, setAdminConfig] = useState({ bunga: 0, bungaPinjaman: 0, denda: 0, pokok: 0, adm: 0 });
 
   // --- helper untuk approval token ---
   const handleApprove = async (amount, onProgress) => {
@@ -154,14 +161,14 @@ export const useKoperasi = (account) => {
       if (onProgress) onProgress('Meminta izin penggunaan token...');
       const allowance = await idrTokenContract.allowance(
         account,
-        KOPERASI_CONTRACT_ADDRESS
+        CONTRACT_ADDRESS
       );
       if (allowance < amount) {
         if (onProgress) onProgress('Menunggu konfirmasi approval di wallet...');
         const tx = await idrTokenContract.approve(
-          KOPERASI_CONTRACT_ADDRESS,
+          CONTRACT_ADDRESS,
           amount,
-          { maxPriorityFeePerGas: ethers.parseUnits('30', 'gwei'), maxFeePerGas: ethers.parseUnits('40', 'gwei') }
+          POLYGON_GAS_OPTIONS
         );
         if (onProgress) onProgress('Menunggu transaksi approval dikonfirmasi...');
         await tx.wait();
@@ -203,10 +210,16 @@ export const useKoperasi = (account) => {
       const allBayar = [];
       const allLunas = [];
       const allDitolak = [];
+      const allBerjangkaBuka = [];
+      const allBerjangkaCair = [];
+      const allSHU = [];
+      const allMemberUpdates = [];
 
       for (const l of allLogsRaw) {
         if (!l.fragment?.name) continue;
         const name = l.fragment.name;
+        l.eventName = name; // [FIX] Ensure explicit name for HistoryList
+
         if (name === 'DepositTercatat') allSimpanan.push(l);
         else if (name === 'PenarikanTercatat') allTarik.push(l);
         else if (name === 'PinjamanDiajukan') allAjukan.push(l);
@@ -214,31 +227,36 @@ export const useKoperasi = (account) => {
         else if (name === 'AngsuranMasuk') allBayar.push(l);
         else if (name === 'PinjamanLunas') allLunas.push(l);
         else if (name === 'PinjamanDitolak') allDitolak.push(l);
+        else if (name === 'SimpananBerjangkaDibuka') allBerjangkaBuka.push(l);
+        else if (name === 'SimpananBerjangkaDicairkan') allBerjangkaCair.push(l);
+        else if (name === 'SHUDiterima') allSHU.push(l);
+        else if (name === 'AnggotaRejoin' || name === 'MemberProfileUpdated') allMemberUpdates.push(l);
       }
 
       // Filter manual by address (safe comparison)
       const userAddr = addr.toLowerCase();
 
-      // MAPPING LOGS
-      const mapLog = (logs, type, userKey, amountKey, timeKey) => {
-        return logs.filter(l => l.args[userKey].toLowerCase() === userAddr).map(l => ({
-          ...l,
-          typeDisplay: type, // Custom tag
-          args: l.args // Keep original
-        }));
+      // [HELPER] Robust User Identification in Logs
+      const getLogUser = (l) => {
+        if (!l.args) return "";
+        const a = l.args;
+        // Check named properties first (most reliable), then positional index 0 or 1
+        const addrCandidate = a.peminjam || a.user || a.member || a.anggota || a[0] || a[1] || "";
+        return typeof addrCandidate === 'string' ? addrCandidate.toLowerCase() : "";
       };
 
-      // DepositTercatat: user (0), amount (1), jenis (2), waktu (3)
-      const logSimpanan = allSimpanan.filter(l => l.args[0].toLowerCase() === userAddr);
-
-      // PenarikanTercatat: user (0), amount (1), waktu (2)
-      const logTarik = allTarik.filter(l => l.args[0].toLowerCase() === userAddr);
-
-      const logAjukan = allAjukan.filter(l => l.args.peminjam.toLowerCase() === userAddr);
-      const logDisetujui = allDisetujui.filter(l => l.args.peminjam.toLowerCase() === userAddr);
-      const logBayar = allBayar.filter(l => l.args.peminjam.toLowerCase() === userAddr);
-      const logLunas = allLunas.filter(l => l.args.peminjam.toLowerCase() === userAddr);
-      const logDitolak = allDitolak.filter(l => l.args.peminjam.toLowerCase() === userAddr);
+      // MAPPING LOGS WITH ROBUST FILTERING
+      const logSimpanan = allSimpanan.filter(l => getLogUser(l) === userAddr);
+      const logTarik = allTarik.filter(l => getLogUser(l) === userAddr);
+      const logAjukan = allAjukan.filter(l => getLogUser(l) === userAddr);
+      const logDisetujui = allDisetujui.filter(l => getLogUser(l) === userAddr);
+      const logBayar = allBayar.filter(l => getLogUser(l) === userAddr);
+      const logLunas = allLunas.filter(l => getLogUser(l) === userAddr);
+      const logDitolak = allDitolak.filter(l => getLogUser(l) === userAddr);
+      const logBerjangkaBuka = allBerjangkaBuka.filter(l => getLogUser(l) === userAddr);
+      const logBerjangkaCair = allBerjangkaCair.filter(l => getLogUser(l) === userAddr);
+      const logSHU = allSHU.filter(l => getLogUser(l) === userAddr);
+      const logMemberUpdates = allMemberUpdates.filter(l => getLogUser(l) === userAddr);
 
       const allLogs = [
         ...logSimpanan,
@@ -248,29 +266,32 @@ export const useKoperasi = (account) => {
         ...logBayar,
         ...logLunas,
         ...logDitolak,
+        ...logBerjangkaBuka,
+        ...logBerjangkaCair,
+        ...logSHU,
+        ...logMemberUpdates
       ];
 
       // Fetch timestamps for all logs
       const allLogsWithTime = await Promise.all(allLogs.map(async (l) => {
         let ts;
-        // Try to get time from args based on event type
-        // DepositTercatat -> args[3]
-        // PenarikanTercatat -> args[2]
-        // PinjamanLunas -> args[2]
-        // PinjamanDisetujui -> args[2] (jatuhTempo, not exact time but close)
-        // AngsuranMasuk -> NO time in args, need block
-        if (l.fragment.name === 'DepositTercatat') ts = Number(l.args[3]);
-        else if (l.fragment.name === 'PenarikanTercatat') ts = Number(l.args[2]);
-        else if (l.fragment.name === 'PinjamanLunas') ts = Number(l.args[2]);
-        else if (l.args.waktu) {
-          ts = Number(l.args.waktu);
-        } else {
+        const name = l.fragment.name;
+        
+        // Accurate timestamp extraction from args
+        if (name === 'DepositTercatat') ts = Number(l.args[3]);
+        else if (name === 'PenarikanTercatat') ts = Number(l.args[2]);
+        else if (name === 'PinjamanLunas') ts = Number(l.args[2]);
+        else if (name === 'SimpananBerjangkaDibuka') ts = Number(l.args[3]);
+        else if (name === 'SimpananBerjangkaDicairkan') ts = Number(l.args[3]);
+        else if (name === 'SHUDiterima') ts = Number(l.args[2]);
+        else if (l.args.timestamp) ts = Number(l.args.timestamp);
+        else if (l.args.waktu) ts = Number(l.args.waktu);
+        else {
           try {
             const block = await l.getBlock();
             ts = block.timestamp;
           } catch (e) {
-            console.error("Err fetch block history:", e);
-            ts = Date.now() / 1000; // Fallback
+            ts = Date.now() / 1000;
           }
         }
         l.extractedTimestamp = ts;
@@ -296,7 +317,7 @@ export const useKoperasi = (account) => {
           logDisetujui.map((l) => Number(l.args.id))
         );
         const lunasIdsUser = new Set(
-          logLunas.map((l) => Number(l.args.id))
+          logLunas.map((l) => Number(l.args.loanId ?? l.args.id))
         );
         const ditolakIdsUser = new Set(
           logDitolak.map((l) => Number(l.args.id))
@@ -350,6 +371,8 @@ export const useKoperasi = (account) => {
       const logsDisetujui = [];
       const logsLunas = [];
       const logsDitolak = [];
+      const logsSurvey = [];
+      const logsCommittee = [];
 
       for (const l of allLogsRaw) {
         if (!l.fragment?.name) continue;
@@ -358,6 +381,8 @@ export const useKoperasi = (account) => {
         else if (name === 'PinjamanDisetujui') logsDisetujui.push(l);
         else if (name === 'PinjamanLunas') logsLunas.push(l);
         else if (name === 'PinjamanDitolak') logsDitolak.push(l);
+        else if (name === 'SurveyApproved') logsSurvey.push(l);
+        else if (name === 'CommitteeApproved') logsCommittee.push(l);
       }
 
       // Normalize logs with timestamps
@@ -383,55 +408,57 @@ export const useKoperasi = (account) => {
 
       // Sets of IDs
       const approvedIds = new Set(logsDisetujui.map(l => Number(l.args.id)));
-      const lunasIds = new Set(logsLunas.map(l => Number(l.args.id)));
+      const lunasIds = new Set(logsLunas.map(l => Number(l.args.loanId ?? l.args.id)));
       const ditolakIds = new Set(logsDitolak.map(l => Number(l.args.id)));
+
+      // [ENHANCEMENT] Detailed Status Map for Pending Candidates
+      // 0:Pending, 1:Surveyed, 2:CommitteeApproved
+      const statusMap = {};
+      logsSurvey.forEach(l => statusMap[Number(l.args.loanId)] = 1);
+      logsCommittee.forEach(l => statusMap[Number(l.args.loanId)] = 2);
 
       // Map ID -> Amount (from PinjamanDiajukan)
       const loanAmounts = {};
-      logsAjukan.forEach(l => {
-        const id = Number(l.args.id);
-        loanAmounts[id] = l.args.jumlah;
-      });
-
-      // Categorize
-      const pending = enhancedAjukan.filter(l => {
+      
+      const pendingCandidates = enhancedAjukan.filter(l => {
         const id = Number(l.args.id);
         return !approvedIds.has(id) && !lunasIds.has(id) && !ditolakIds.has(id);
-      }).sort((a, b) => b.extractedTimestamp - a.extractedTimestamp);
+      });
+
+      // [CRITICAL] Real-time State Verification for Pending Candidates
+      // To prevent "execution reverted: Status must be Pending", we fetch the truth from the contract
+      const pending = await Promise.all(pendingCandidates.map(async (l) => {
+        const id = Number(l.args.id);
+        let status = statusMap[id] || 0;
+        
+        try {
+          // Verify with contract to ensure sync
+          const data = await kop.dataPinjaman(id);
+          status = Number(data.status); // Source of Truth
+        } catch (e) {
+          console.warn(`Failed to verify status for loan ${id}, using event data.`);
+        }
+
+        l.status = status;
+        return l;
+      }));
+
+      pending.sort((a, b) => b.extractedTimestamp - a.extractedTimestamp);
 
       const active = enhancedDisetujui.filter(l => {
         const id = Number(l.args.id);
-        return approvedIds.has(id) && !lunasIds.has(id); // Approved but not Lunas
+        return !lunasIds.has(id);
       }).map(l => {
-        // Inject jumlah from lookup
         const id = Number(l.args.id);
-        // Clone args to avoid mutation issues if it's frozen, 
-        // but Ethers args are usually array-like. 
-        // Safer to add a top-level property 'jumlah' or modify 'args' if possible.
-        // Let's modify the object we are returning directly.
-        // We can't easily modify l.args if it's a Result object.
-        // So we treat 'l' as the base, and we'll ensure the UI looks for 'customJumlah' or validates args.
-
-        // Actually, let's just make a new object wrapper or attach to l
         l.amountOverride = loanAmounts[id] || 0n;
         return l;
       }).sort((a, b) => b.extractedTimestamp - a.extractedTimestamp);
 
       const paid = enhancedLunas.sort((a, b) => b.extractedTimestamp - a.extractedTimestamp);
       const rejected = enhancedDitolak.sort((a, b) => b.extractedTimestamp - a.extractedTimestamp);
+      
       setAllLoans({ pending, active, paid, rejected });
-      setPendingLoans(pending); // Keep this for backward compat if needed
-
-      // Count Approved Today
-      const now = new Date();
-      const options = { timeZone: 'Asia/Makassar', year: 'numeric', month: 'numeric', day: 'numeric' };
-      const todayStr = now.toLocaleDateString('id-ID', options);
-      let todayCount = 0;
-      enhancedDisetujui.forEach(l => {
-        const d = new Date(l.extractedTimestamp * 1000);
-        if (d.toLocaleDateString('id-ID', options) === todayStr) todayCount++;
-      });
-      setApprovedTodayCount(todayCount);
+      setPendingLoans(pending);
 
     } catch (err) {
       console.error('Gagal fetch all loans:', err);
@@ -451,21 +478,6 @@ export const useKoperasi = (account) => {
   const fetchSHUHistory = async (kop) => {
     if (!kop) return;
     try {
-      // [FIX] Event SHUDidistribusikan not found in ABI. Disabling fetch for now.
-      /*
-      const filter = kop.filters.SHUDidistribusikan(null, null);
-      const logs = await fetchLogsViaScanner(kop, filter, DEPLOY_BLOCK);
-      const hist = await Promise.all(logs.map(async (l) => {
-        const block = await l.getBlock();
-        return {
-          id: l.transactionHash,
-          tanggal: new Date(block.timestamp * 1000).toLocaleDateString(),
-          totalSHU: formatCurrency(Number(l.args.totalSHU)),
-          shuPerAnggota: formatCurrency(Number(l.args.shuPerAnggota))
-        };
-      }));
-      setSHUHistory(hist);
-      */
       setShuHistory([]); // Empty for now
     } catch (e) {
       console.error("Gagal fetch history SHU:", e);
@@ -596,7 +608,7 @@ export const useKoperasi = (account) => {
       const profit = await kop.profitBelumDibagi();
       const shared = await kop.totalSHUDibagikan();
       const totalSimp = await kop.totalSimpananSeluruhAnggota();
-      const bal = await token.balanceOf(KOPERASI_CONTRACT_ADDRESS);
+      const bal = await token.balanceOf(CONTRACT_ADDRESS);
 
       // Fetch Balances (Xendit + Admin POL)
       let midtransBal = '0';
@@ -630,123 +642,183 @@ export const useKoperasi = (account) => {
     }
   };
 
-  const bagikanSHU = async (onProgress) => {
-    if (!koperasiContract || !idrTokenContract) throw new Error("Kontrak belum siap");
-
-    try {
-      if (onProgress) onProgress("Memeriksa profit & likuiditas...");
-      const profit = await koperasiContract.profitBelumDibagi();
-      if (Number(profit) <= 0) throw new Error("Belum ada profit untuk dibagikan.");
-
-      const totalSimp = await koperasiContract.totalSimpananSeluruhAnggota();
-      if (Number(totalSimp) <= 0) {
-        throw new Error("Total Simpanan 0, tidak bisa membagikan SHU tanpa anggota.");
-      }
-
-      const bal = await idrTokenContract.balanceOf(koperasiContract.target);
-      if (bal < profit) {
-        throw new Error(`Likuiditas Kurang! Profit: ${formatToken(profit)}, Saldo Kontrak: ${formatToken(bal)}. Silahkan tambah likuiditas.`);
-      }
-
-      if (onProgress) onProgress("Membagikan SHU...");
-      // Add manual gas limit to prevent estimation errors
-      const tx = await koperasiContract.bagikanSHU({ gasLimit: 500000, maxPriorityFeePerGas: ethers.parseUnits('30', 'gwei'), maxFeePerGas: ethers.parseUnits('40', 'gwei') });
-      if (onProgress) onProgress("Menunggu konfirmasi...");
-      await tx.wait();
-      await fetchAdminStats(koperasiContract, idrTokenContract);
-      return tx;
-    } catch (e) {
-      console.error(e);
-      throw e;
-    }
-  };
+  // bagikanSHU deprecated - using releaseProfitSharing via API
 
   const emergencyWithdraw = async (tokenAddr, amountStr, onProgress) => {
-    if (!koperasiContract || !idrTokenContract) throw new Error("Kontrak belum siap");
-    try {
-      const amount = parseToken(amountStr);
-
-      // Cek saldo kontrak dulu
-      if (onProgress) onProgress("Memeriksa saldo kontrak...");
-      const bal = await idrTokenContract.balanceOf(koperasiContract.target);
-      if (bal < amount) {
-        throw new Error(`Saldo Kontrak Kurang! Saldo: ${formatToken(bal)}, Tarik: ${formatToken(amount)} `);
-      }
-
-      // [FIX] Feature not available in current contract
-      throw new Error("Fitur Emergency Withdraw tidak tersedia di Smart Contract ini.");
-
-      /*
-      if (onProgress) onProgress("Menarik dana...");
-      const tx = await koperasiContract.emergencyWithdraw(tokenAddr, amount);
-      if (onProgress) onProgress("Menunggu konfirmasi...");
-      await tx.wait();
-      await fetchAdminStats(koperasiContract, idrTokenContract);
-      return tx;
-      */
-    } catch (e) {
-      console.error(e);
-      throw e;
-    }
+    throw new Error("Fitur Emergency Withdraw tidak tersedia di Smart Contract ini.");
   };
 
   const fetchAdminConfig = async (kop) => {
     if (!kop) return;
     try {
-      const bungaSimpanan = await kop.bungaSimpananTahunanPersen();
-      const bungaPinjaman = await kop.bungaPinjamanTahunanPersen();
-      const denda = await kop.dendaHarianPermil();
+      const [bSimpanan, bPinjaman, denda, settsRaw] = await Promise.all([
+        kop.bungaSimpananTahunanPersen(),
+        kop.bungaPinjamanTahunanPersen(),
+        kop.dendaHarianPermil(),
+        kop.settings()
+      ]);
+      
+      console.log("[Admin] DIAGNOSTIC: Settings fetched from Blockchain.");
+
+      // Ethers v6 Result to POJO
+      const setts = typeof settsRaw.toObject === 'function' ? settsRaw.toObject() : settsRaw;
+
       setAdminConfig({
-        bunga: Number(bungaSimpanan),
-        bungaPinjaman: Number(bungaPinjaman),
-        denda: Number(denda)
+        bunga: Number(bSimpanan),
+        bungaPinjaman: Number(bPinjaman),
+        denda: Number(denda),
+        // Indices map: [4] = Pokok, [5] = Adm
+        pokok: Number(ethers.formatUnits(setts[4] || setts.nominalSimpananPokok || 0, 18)),
+        adm: 0 // Hidden for JDCOOP compliance
       });
     } catch (e) {
       console.error("Gagal fetch config:", e);
     }
   };
 
-  // --- Actions Admin ---
-  const setSukuBunga = async (persen, onProgress) => {
+  const updateGlobalSettings = async (params, onProgress) => {
     if (!koperasiContract) throw new Error("Kontrak belum siap");
-    if (onProgress) onProgress("Mengupdate suku bunga simpanan...");
-    // [FIX] Match ABI: setBungaSimpanan
-    const tx = await koperasiContract.setBungaSimpanan(persen, { maxPriorityFeePerGas: ethers.parseUnits('30', 'gwei'), maxFeePerGas: ethers.parseUnits('40', 'gwei') });
-    if (onProgress) onProgress("Menunggu konfirmasi...");
-    await tx.wait();
+    try {
+      if (onProgress) onProgress("Mengupdate pengaturan global (Zero Gas)...");
+      console.log("[Admin] DIAGNOSTIC: Sending Payload to Server:", JSON.stringify({ params }));
+      const response = await fetch('http://localhost:5000/api/gov/update-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ params })
+      });
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error || "Gagal update settings");
+      if (onProgress) onProgress("Berhasil update pengaturan!");
+      
+      // [FIX] Add a small delay to allow blockchain state to propagate
+      if (onProgress) onProgress("Menyinkronkan data terbaru...");
+      await new Promise(resolve => setTimeout(resolve, 1500));
 
-    // [FIX] Update state lokal manual agar UI langsung berubah (antisipasi RPC delay)
-    setAdminConfig(prev => ({ ...prev, bunga: Number(persen) }));
-
-    // Fetch ulang untuk sinkronisasi akhir (opsional, tapi good practice)
-    setTimeout(() => fetchAdminConfig(koperasiContract), 2000);
-
-    return tx;
+      // Explicit refresh to ensure UI sync
+      await fetchAdminConfig(koperasiContract);
+    } catch (e) {
+      console.error("Gagal update settings:", e);
+      throw e;
+    }
   };
 
-  const setDendaHarian = async (permil, onProgress) => {
-    if (!koperasiContract) throw new Error("Kontrak belum siap");
-    if (onProgress) onProgress("Mengupdate denda harian...");
-    const tx = await koperasiContract.setDendaHarian(permil, { maxPriorityFeePerGas: ethers.parseUnits('30', 'gwei'), maxFeePerGas: ethers.parseUnits('40', 'gwei') });
-    if (onProgress) onProgress("Menunggu konfirmasi...");
-    await tx.wait();
-
-    // [FIX] Update state lokal manual
-    setAdminConfig(prev => ({ ...prev, denda: Number(permil) }));
-
-    setTimeout(() => fetchAdminConfig(koperasiContract), 2000);
-
-    return tx;
+  const closeMembership = async (memberAddress, onProgress) => {
+    try {
+      if (onProgress) onProgress("Menutup keanggotaan (Zero Gas)...");
+      const response = await fetch('http://localhost:5000/api/admin/close-membership', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memberAddress })
+      });
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error || "Gagal tutup keanggotaan");
+      
+      if (onProgress) onProgress("Sinkronisasi data...");
+      await fetchAllMembers(koperasiContract);
+    } catch (e) {
+      console.error("Gagal tutup keanggotaan:", e);
+      throw e;
+    }
   };
 
+  const approveSurvey = async (loanId, note, onProgress) => {
+    try {
+      if (onProgress) onProgress('Memproses Persetujuan Survey (Admin)...');
+      const response = await fetch('http://localhost:5000/api/loan/survey', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ loanId, note })
+      });
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error || "Gagal approve survey");
+      triggerTripleSync();
+      return data;
+    } catch (err) {
+      console.error(err);
+      throw err;
+    }
+  };
 
+  const approveCommittee = async (loanId, onProgress) => {
+    try {
+      if (onProgress) onProgress('Memproses Persetujuan Komite (Admin)...');
+      const response = await fetch('http://localhost:5000/api/loan/committee', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ loanId })
+      });
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error || "Gagal approve komite");
+      triggerTripleSync();
+      return data;
+    } catch (err) {
+      console.error(err);
+      throw err;
+    }
+  };
 
-  // --- data utama user ---
+  const generateMonthlyBills = async (amount, onProgress) => {
+    try {
+      if (onProgress) onProgress('Menghasilkan tagihan bulanan massal...');
+      const response = await fetch('http://localhost:5000/api/gov/generate-bills', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount })
+      });
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error || "Gagal generate bills");
+      triggerTripleSync();
+      return data;
+    } catch (err) {
+      console.error(err);
+      throw err;
+    }
+  };
+
+  const releaseProfitSharing = async (percentage, onProgress) => {
+    try {
+      if (onProgress) onProgress(`Membagikan SHU ${percentage}%...`);
+      const response = await fetch('http://localhost:5000/api/gov/release-sharing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ percentage })
+      });
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error || "Gagal bagi hasil");
+      triggerTripleSync();
+      return data;
+    } catch (err) {
+      console.error(err);
+      throw err;
+    }
+  };
+
   const triggerTripleSync = () => {
     console.log("[Sync] Triggering Triple-Sync Strategy (2s, 8s, 18s)...");
     setTimeout(refresh, 2000);
     setTimeout(refresh, 8000);
     setTimeout(refresh, 18000);
+  };
+
+  const fetchUserTimeDeposits = async (kop, userAddr) => {
+    if (!kop || !userAddr) return [];
+    try {
+      // [FIX] Use High-Performance Batch Getter (No more execution reverted!)
+      const data = await kop.getAllSimpananBerjangka(userAddr);
+      
+      const deposits = data.map((d, i) => ({
+        index: i,
+        amount: d.amount,
+        lockUntil: Number(d.lockUntil),
+        interestRate: d.interestRate,
+        active: d.active
+      }));
+      
+      return deposits;
+    } catch (err) {
+      console.error("Gagal fetch time deposits via Batch:", err);
+      return [];
+    }
   };
 
   const fetchUserData = async (addr, kop, token) => {
@@ -762,6 +834,9 @@ export const useKoperasi = (account) => {
 
     try {
       setMessage('Memuat data...');
+      // [FIX] Always fetch global settings even for regular members to ensure UI sync
+      fetchAdminConfig(kop);
+
       const balance = await token.balanceOf(addr);
       setIdrtBalance(formatToken(balance));
 
@@ -770,35 +845,28 @@ export const useKoperasi = (account) => {
 
       const data = await kop.dataAnggota(addr);
 
-      // [FIX] Explicitly structure data to avoid proxy/spread issues with Ethers Result
-      // [FIX] Virtual Split: Registration Fee (Pokok) is 100k, physically stored in Wajib in the contract.
-      const POKOK_RAW = 100000n * (10n ** 18n); 
-      let sPokok = 0n;
-      let sWajib = data.simpananWajib || 0n;
-
-      if (data.terdaftar) {
-        if (sWajib >= POKOK_RAW) {
-          sPokok = POKOK_RAW;
-          sWajib = sWajib - POKOK_RAW;
-        } else {
-          sPokok = sWajib;
-          sWajib = 0n;
-        }
-      }
-
       const formattedData = {
-        terdaftar: data.terdaftar,
-        nama: data.nama,
-        simpananPokok: sPokok,
-        simpananWajib: sWajib,
-        simpananSukarela: data.simpananSukarela || 0n,
-        shuSudahDiambil: data.shuSudahDiambil || 0n
+        terdaftar: data.terdaftar || data[0],
+        status: Number(data.status !== undefined ? data.status : data[1]), 
+        nama: data.nama || data[2],
+        noHP: data.noHP || data[3],
+        noKTP: data.noKTP || data[4],
+        alamat: data.alamat || data[5],
+        gender: data.jenisKelamin || data[6],
+        job: data.pekerjaan || data[7],
+        emergency: data.kontakDarurat || data[8],
+        simpananPokok: data.simpananPokok || data[9] || 0n,
+        simpananWajib: data.simpananWajib || data[10] || 0n,
+        simpananSukarela: data.simpananSukarela || data[11] || 0n,
+        shuSudahDiambil: data.shuSudahDiambil || data[12] || 0n,
+        branchId: Number(data.branchID !== undefined ? data.branchID : data[13]),
+        limitPinjaman: data.limitPinjaman || data[14] || 0n,
+        currentBilling: await kop.tagihanWajib(addr)
       };
 
       setAnggotaData(formattedData);
 
       if (formattedData.terdaftar) {
-        // [FIX] Calculate total of all savings using the consolidated virtual fields
         const total = BigInt(formattedData.simpananPokok) + BigInt(formattedData.simpananWajib) + BigInt(formattedData.simpananSukarela);
         setTotalSimpanan(formatToken(total));
 
@@ -818,31 +886,37 @@ export const useKoperasi = (account) => {
             sudahDibayar: pinjaman.sudahDibayar || pinjaman[4],
             tenorBulan: pinjaman.tenorBulan || pinjaman[5],
             waktuJatuhTempo: pinjaman.waktuJatuhTempo || pinjaman[6],
-            // Field 7 is status (Enum/Uint)
             status: Number(pinjaman.status || pinjaman[7]),
+            quality: Number(pinjaman.quality || pinjaman[8]), // Kolektibilitas enum
+            isRestructured: pinjaman.isRestructured,
+            surveyNote: pinjaman.surveyNote,
 
-            // These fields do not exist in the current contract struct, set defaults
-            bungaPersenSaatIni: 0n,
-            terakhirDendaDiupdate: 0n,
-
-            lunas: Number(pinjaman.status || pinjaman[7]) === 2,
-            disetujui: Number(pinjaman.status || pinjaman[7]) === 1 || Number(pinjaman.status || pinjaman[7]) === 2
+            lunas: Number(pinjaman.status || pinjaman[7]) === 4, // StatusPinjaman.Lunas
+            disetujui: Number(pinjaman.status || pinjaman[7]) === 3, // StatusPinjaman.Aktif
           };
 
           const st = Number(mappedPinjaman.status);
 
-          // Only treat as Active Loan if Status is Disetujui (1) or Lunas (2)
-          // If Pending (0) or Rejected (3), do not set as pinjamanAktif
-          if (st === 1 || st === 2) {
+          // StatusPinjaman: 0:Pending, 1:Surveyed, 2:CommitteeApproved, 3:Aktif, 4:Lunas, 5:Ditolak, 6:Macet
+          if (st >= 0 && st <= 2) {
+            setPendingLoanUser(mappedPinjaman);
+            setPinjamanAktif(null);
+          } else if (st === 3 || st === 4 || st === 6) {
             setPinjamanAktif(mappedPinjaman);
+            setPendingLoanUser(null);
           } else {
             setPinjamanAktif(null);
+            setPendingLoanUser(null);
           }
         } else {
           setPinjamanAktif(null);
+          setPendingLoanUser(null);
         }
 
         await fetchHistory(addr, kop);
+        
+        const deposits = await fetchUserTimeDeposits(kop, addr);
+        setUserTimeDeposits(deposits);
       } else {
         setPinjamanAktif(null);
         setPendingLoanUser(null);
@@ -872,25 +946,23 @@ export const useKoperasi = (account) => {
   const fetchAllMembers = async (kop) => {
     if (!kop) return;
     try {
-      const count = await kop.jumlahAnggota();
-      const total = Number(count);
-      const members = [];
-      for (let i = 0; i < total; i++) {
-        const addr = await kop.listAlamatAnggota(i);
-        const data = await kop.dataAnggota(addr);
-        // Ethers Result array-like structure needing explicit access or proper conversion
-        members.push({
-          address: addr,
-          nama: data.nama,
-          simpananPokok: data.simpananPokok,
-          simpananWajib: data.simpananWajib,
-          simpananSukarela: data.simpananSukarela,
-          terdaftar: data.terdaftar
-        });
-      }
+      // [FIX] Use High-Performance Batch Getter for Admin (Instant Load)
+      const [addrs, data] = await kop.getAllMembers();
+      
+      const members = addrs.map((addr, i) => ({
+        address: addr,
+        nama: data[i].nama,
+        simpananPokok: data[i].simpananPokok,
+        simpananWajib: data[i].simpananWajib,
+        simpananSukarela: data[i].simpananSukarela,
+        terdaftar: data[i].terdaftar,
+        status: Number(data[i].status), 
+        branchId: Number(data[i].branchID)
+      }));
+      
       setMemberList(members);
     } catch (err) {
-      console.error('Gagal fetch member list:', err);
+      console.error('Gagal fetch member list via Batch:', err);
     }
   };
 
@@ -956,12 +1028,12 @@ export const useKoperasi = (account) => {
         }
 
         const kop = new ethers.Contract(
-          KOPERASI_CONTRACT_ADDRESS,
+          CONTRACT_ADDRESS,
           KoperasiABI.abi || KoperasiABI,
           signer
         );
         const token = new ethers.Contract(
-          IDRTOKEN_CONTRACT_ADDRESS,
+          TOKEN_ADDRESS,
           IDRTokenABI.abi,
           signer
         );
@@ -1022,50 +1094,46 @@ export const useKoperasi = (account) => {
     setIsLoading(false);
   };
 
-  const daftarAnggota = async (nama, ktpLink = "ipfs://QmDummyHash", onProgress) => {
+  const daftarAnggota = async (params, onProgress) => {
     if (!account) throw new Error("Wallet belum terhubung");
-    if (!nama) throw new Error("Nama tidak boleh kosong");
+    if (!params || !params.nama) throw new Error("Data pendaftaran tidak lengkap");
 
     try {
-      // 1. Register to Blockchain via Backend FIRST
-      if (onProgress) onProgress('Mendaftarkan via Admin (Zero Gas)...');
-
-      const response = await fetch('http://localhost:5000/api/register', {
+      setIsLoading(true);
+      if (onProgress) onProgress('Memproses pendaftaran...');
+      // 1. Simpan Pending ke Server (agar data tidak hilang jika tab tertutup)
+      console.log("[Daftar] Saving pending reg to server for:", account);
+      const res = await fetch('http://localhost:5000/api/admin/pending-pendaftaran', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userAddress: account,
-          name: nama,
-          ktpLink: ktpLink
+        body: JSON.stringify({ 
+          address: account, 
+          params: params 
         })
       });
-
-      const data = await response.json();
+      const data = await res.json();
       if (!data.success) {
-        // If error is "already registered", ignore and proceed to payment
-        if (data.error && data.error.includes("sudah terdaftar")) {
-          console.warn("User already registered, proceeding to payment...");
+        // [FIX] If already registered on blockchain but not in DB, it's okay to proceed to payment
+        if (data.error && data.error.includes("telah terdaftar")) {
+           console.warn("[Daftar] User already exists in DB, proceeding to payment refresh logic.");
         } else {
           throw new Error(data.error || "Gagal mendaftar");
         }
       }
 
-      if (onProgress) onProgress('Pendaftaran Akun Sukses! Lanjut Pembayaran Simpanan Pokok...');
-
-      // 2. Payment Simpanan Pokok (Wajib di awal) - Misal Rp 100.000
-      // Gunakan isWajib=true agar tercatat sebagai simpanan wajib/pokok
-      if (onProgress) onProgress('Memproses Pembayaran Simpanan Pokok (Rp 100.000)...');
-
-      // Call Helper Payment
-      // Note: We use '100000' hardcoded or from config if available.
-      const paymentResult = await processXenditPayment('100000', true, onProgress);
-
-      if (onProgress) onProgress('Pendaftaran Selesai! Menunggu pembayaran pada modal...');
+      if (onProgress) onProgress('Data pendaftaran tersimpan di sistem! Lanjut ke Pembayaran...');
+      const pokokAmount = adminConfig?.pokok ? adminConfig.pokok.toString() : '100000';
+      if (onProgress) onProgress(`Memproses Invoice Pembayaran Simpanan Pokok (Rp ${formatCurrency(pokokAmount)})...`);
+      
+      const paymentResult = await processXenditPayment(pokokAmount, 'POKOK', onProgress);
+      if (onProgress) onProgress('Pendaftaran Selesai! Silakan selesaikan pembayaran.');
 
       return { ...data, ...paymentResult };
     } catch (err) {
       console.error(err);
       throw err;
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -1113,8 +1181,35 @@ export const useKoperasi = (account) => {
 
 
   const bayarSimpananWajib = async (onProgress) => {
-    // 25.000 (Example)
-    return processXenditPayment('25000', true, onProgress);
+    // 25.000 (Example) - Now uses dynamic billing amount if available
+    const amount = anggotaData?.currentBilling || parseToken('25000');
+    return processXenditPayment(formatToken(amount), true, onProgress);
+  };
+
+  // NEW: Internal Ledger Payment (Balance -> Billing)
+  const bayarSimpananWajibInternal = async (onProgress) => {
+    if (!koperasiContract) throw new Error("Kontrak belum siap");
+    try {
+      const amount = anggotaData?.currentBilling || 0n;
+      if (amount === 0n) throw new Error("Tidak ada tagihan aktif.");
+
+      const sukarela = BigInt(anggotaData?.simpananSukarela || 0);
+      if (sukarela < amount) {
+        throw new Error(`Saldo Sukarela tidak cukup! Butuh ${formatCurrency(formatToken(amount))} IDRT.`);
+      }
+
+      if (onProgress) onProgress('Memproses pembayaran internal (Blockchain Ledger)...');
+      const tx = await koperasiContract.bayarTagihanWajib(amount, POLYGON_GAS_OPTIONS);
+      
+      if (onProgress) onProgress('Menunggu konfirmasi ledger...');
+      await tx.wait();
+      
+      await refresh();
+      return tx;
+    } catch (err) {
+      console.error(err);
+      throw err;
+    }
   };
 
   const bayarSimpananSukarela = async (jumlahStr, onProgress) => {
@@ -1125,6 +1220,7 @@ export const useKoperasi = (account) => {
     if (!koperasiContract) throw new Error("Kontrak belum siap");
 
     try {
+      setIsLoading(true);
       const jumlah = parseToken(jumlahStr || '0');
       const tenor = parseInt(tenorBulan || 12);
 
@@ -1149,7 +1245,10 @@ export const useKoperasi = (account) => {
 
       if (onProgress) onProgress('Mengirim pengajuan pinjaman (MetaMask)...');
       // Direct Blockchain Call (User pays gas)
-      const tx = await koperasiContract.ajukanPinjaman(jumlah, tenor, { gasLimit: 500000, maxPriorityFeePerGas: ethers.parseUnits('30', 'gwei'), maxFeePerGas: ethers.parseUnits('40', 'gwei') });
+      const tx = await koperasiContract.ajukanPinjaman(jumlah, tenor, { 
+        ...POLYGON_GAS_OPTIONS,
+        gasLimit: 600000 
+      });
 
       if (onProgress) onProgress('Menunggu konfirmasi blockchain...');
       await tx.wait();
@@ -1177,6 +1276,8 @@ export const useKoperasi = (account) => {
     } catch (err) {
       console.error(err);
       throw err;
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -1226,10 +1327,79 @@ export const useKoperasi = (account) => {
     }
   };
 
+  const bayarAngsuranInternal = async (jumlahStr, onProgress) => {
+    if (!koperasiContract || !pinjamanAktif) throw new Error("Data tidak valid");
+    try {
+      const amount = parseToken(jumlahStr || '0');
+      const sukarela = BigInt(anggotaData?.simpananSukarela || 0);
+
+      if (sukarela < amount) {
+        throw new Error(`Saldo Sukarela tidak cukup! Butuh ${formatCurrency(jumlahStr)} IDRT.`);
+      }
+
+      if (onProgress) onProgress('Memproses pelunasan internal (Blockchain Ledger)...');
+      const tx = await koperasiContract.bayarAngsuranInternal(pinjamanAktif.id, amount, POLYGON_GAS_OPTIONS);
+      
+      if (onProgress) onProgress('Menunggu konfirmasi pelunasan...');
+      await tx.wait();
+      
+      await refresh();
+      return tx;
+    } catch (err) {
+      console.error(err);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const openSimpananBerjangka = async (amountStr, tenorBulan, onProgress) => {
+    if (!koperasiContract) throw new Error("Kontrak belum siap");
+    try {
+      setIsLoading(true);
+      const amount = parseToken(amountStr || '0');
+      if (onProgress) onProgress('Membuka simpanan berjangka (Internal Transfer)...');
+      
+      const tx = await koperasiContract.openSimpananBerjangka(amount, tenorBulan, POLYGON_GAS_OPTIONS);
+      
+      if (onProgress) onProgress('Menunggu konfirmasi blockchain...');
+      await tx.wait();
+      
+      await refresh(); // Refresh all data
+      return tx;
+    } catch (err) {
+      console.error(err);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const cairkanSimpananBerjangka = async (index, onProgress) => {
+    if (!koperasiContract) throw new Error("Kontrak belum siap");
+    try {
+      setIsLoading(true);
+      if (onProgress) onProgress('Memproses pencairan tabungan berjangka...');
+      const tx = await koperasiContract.cairkanSimpananBerjangka(index, POLYGON_GAS_OPTIONS);
+      
+      if (onProgress) onProgress('Menunggu konfirmasi pencairan...');
+      await tx.wait();
+      
+      await refresh();
+      return tx;
+    } catch (err) {
+      console.error(err);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const tarikSimpanan = async (jumlahStr, bank, rekening, onProgress) => {
     if (!koperasiContract) throw new Error("Kontrak belum siap");
 
     try {
+      setIsLoading(true);
       const jumlah = parseToken(jumlahStr || '0');
 
       // Validasi basic client side
@@ -1267,6 +1437,8 @@ export const useKoperasi = (account) => {
     } catch (err) {
       console.error(err);
       throw err;
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -1337,21 +1509,25 @@ export const useKoperasi = (account) => {
   };
 
   const tolakPinjaman = async (idStr, reason = "Ditolak Admin", onProgress) => {
-    if (!koperasiContract) throw new Error("Kontrak belum siap");
     try {
-      if (onProgress) onProgress('Mengirim penolakan...');
-      // [FIX] Force Gas Price for Polygon Amoy (Min 25 Gwei -> Set 35 Gwei)
-      const overrides = { maxPriorityFeePerGas: ethers.parseUnits('30', 'gwei'), maxFeePerGas: ethers.parseUnits('40', 'gwei') };
+      if (onProgress) onProgress('Mengirim penolakan ke server (Zero Gas)...');
 
-      // Contract expects: tolakPinjaman(uint256 id, string reason)
-      const tx = await koperasiContract.tolakPinjaman(idStr, reason, overrides);
-      if (onProgress) onProgress('Menunggu konfirmasi penolakan...');
-      await tx.wait();
+      const response = await fetch('http://localhost:5000/api/loan/reject', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          loanId: idStr,
+          reason: reason
+        })
+      });
 
-      // [FIX] Triple-Sync Strategy for Admin (Rejection sync: 2s, 8s, 18s)
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error || "Gagal memproses penolakan di server");
+
+      if (onProgress) onProgress('Penolakan berhasil dicatat!');
       triggerTripleSync();
 
-      return tx;
+      return { hash: data.txHash, wait: async () => true };
     } catch (err) {
       console.error(err);
       throw err;
@@ -1412,6 +1588,7 @@ export const useKoperasi = (account) => {
   const tambahLikuiditas = async (amountStr, onProgress) => {
     if (!koperasiContract) throw new Error("Kontrak belum siap");
     try {
+      setIsLoading(true);
       const amount = parseToken(amountStr);
 
       // 1. Cek Saldo Admin
@@ -1426,8 +1603,7 @@ export const useKoperasi = (account) => {
       // 3. Execute Contract Call
       if (onProgress) onProgress('Menambah likuiditas...');
       // [FIX] Force Gas Price
-      const overrides = { gasLimit: 500000, maxPriorityFeePerGas: ethers.parseUnits('30', 'gwei'), maxFeePerGas: ethers.parseUnits('40', 'gwei') };
-      const tx = await koperasiContract.tambahLikuiditas(amount, overrides);
+      const tx = await koperasiContract.tambahLikuiditas(amount, POLYGON_GAS_OPTIONS);
       if (onProgress) onProgress('Menunggu konfirmasi...');
       await tx.wait();
 
@@ -1436,6 +1612,8 @@ export const useKoperasi = (account) => {
     } catch (err) {
       console.error(err);
       throw err;
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -1458,11 +1636,26 @@ export const useKoperasi = (account) => {
   React.useEffect(() => {
     // 1. Detect Status from URL (for redirected tab)
     const params = new URLSearchParams(window.location.search);
-    if (params.get('payment') === 'success') {
-      setPaymentSuccess(true);
-      setIsPaymentLocked(false);
-      // Clean URL
+    const paymentStatus = params.get('payment');
+    
+    if (paymentStatus === 'success') {
+      // Clean URL IMMEDIATELY to prevent loop before state takes effect
       window.history.replaceState({}, document.title, window.location.pathname);
+      
+      // OPTIONAL: use session storage to ensure we only trigger the effect ONCE per refresh
+      const lastProcessedTime = sessionStorage.getItem('last_processed_payment');
+      const now = Date.now();
+      
+      // Only trigger if not processed in the last 10 seconds (prevents double fire)
+      if (!lastProcessedTime || (now - Number(lastProcessedTime) > 10000)) {
+        console.log("[Payment] Success detected from URL, setting state...");
+        setPaymentSuccess(true);
+        setIsPaymentLocked(false);
+        sessionStorage.setItem('last_processed_payment', now.toString());
+
+        // [FIX] Trigger Aggressive Triple-Sync to catch late blockchain confirmations
+        triggerTripleSync();
+      }
     }
 
     // 2. Listen for messages from other tabs
@@ -1509,34 +1702,50 @@ export const useKoperasi = (account) => {
 
         interval = setInterval(async () => {
           try {
-            let currentValue = 0n;
             let successTriggered = false;
 
-            if (paymentType === 'simpanan') {
-              currentValue = await idrTokenContract.balanceOf(account);
-              if (currentValue > baselineValue) successTriggered = true;
+            if (paymentType === 'simpanan' || paymentType === 'POKOK') {
+              // [FIX] For Registration (Pokok), explicitly check the 'terdaftar' status in addition to balance
+              const [currentBalance, member] = await Promise.all([
+                  idrTokenContract.balanceOf(account),
+                  koperasiContract.dataAnggota(account)
+              ]);
+
+              if (paymentType === 'POKOK') {
+                  if (member.terdaftar || (typeof member[0] === 'boolean' && member[0])) {
+                      console.log("[Polling] Registration confirmed ACTIVE on blockchain.");
+                      successTriggered = true;
+                  }
+              } else {
+                  if (currentBalance > baselineValue) successTriggered = true;
+              }
             } else {
+              // Repayment check
               const id = await koperasiContract.idPinjamanAktifAnggota(account);
               if (Number(id) > 0) {
                 const loan = await koperasiContract.dataPinjaman(id);
-                currentValue = loan.sudahDibayar || loan[4];
-                if (currentValue > baselineValue) successTriggered = true;
+                const currentRepaid = loan.sudahDibayar || loan[4];
+                if (currentRepaid > baselineValue) successTriggered = true;
               }
             }
 
             if (successTriggered && isMounted) {
-              console.log(`[Polling] SUCCESS! ${paymentType} detected. ${baselineValue} -> ${currentValue}`);
+              console.log(`[Polling] SUCCESS! ${paymentType} detected.`);
               clearInterval(interval);
+              
+              // [FIX] Immediate state refresh before unlocking
+              await fetchUserData(account, koperasiContract, idrTokenContract);
+              
               setPaymentSuccess(true);
               setIsPaymentLocked(false);
 
-              // [FIX] Unified Triple-Sync Strategy
+              // [FIX] Unified Triple-Sync Strategy for final consistency
               triggerTripleSync();
             }
           } catch (pollErr) {
             console.warn("[Polling] Tick error:", pollErr);
           }
-        }, 5000); // Poll every 5 seconds
+        }, 4000); // Polling frequency 4s
       } catch (baseErr) {
         console.error("[Polling] Failed to set baseline:", baseErr);
       }
@@ -1556,8 +1765,6 @@ export const useKoperasi = (account) => {
   const cancelPayment = () => {
     setIsPaymentLocked(false);
     setPaymentSuccess(false);
-    // [FIX] Jangan pasang pesan global di sini agar formulir bisa menangani sendiri secara lokal.
-    // Hapus: setMessage("Pembayaran dibatalkan oleh pengguna.");
   };
 
   return {
@@ -1573,17 +1780,24 @@ export const useKoperasi = (account) => {
     totalSimpanan,
     pinjamanAktif,
     history,
+    userTimeDeposits,
     pendingLoanUser,
     pendingLoans,
     mintTesting,
     daftarAnggota,
-    setorSimpananWajib: bayarSimpananWajib, // Alias for compatibility
+    setorSimpananWajib: bayarSimpananWajib,
+    bayarSimpananWajibInternal,
     tarikSimpanan,
-    setorSimpananSukarela: bayarSimpananSukarela, // Alias for compatibility
+    setorSimpananSukarela: bayarSimpananSukarela,
     ajukanPinjaman,
+    openSimpananBerjangka,
     bayarAngsuran,
     setujuiPinjaman,
     tolakPinjaman,
+    approveSurvey,
+    approveCommittee,
+    bayarAngsuranInternal,
+    cairkanSimpananBerjangka,
 
     refresh,
     approvedTodayCount,
@@ -1592,23 +1806,24 @@ export const useKoperasi = (account) => {
     memberList,
     fetchAllMembers,
     mintToken,
-    allSimpananLogs, // New
-    fetchAllSimpananLogs, // New
+    allSimpananLogs,
+    fetchAllSimpananLogs,
 
     // Admin Config & All Loans
     allLoans,
     adminConfig,
-    setSukuBunga,
-    setDendaHarian,
+    updateGlobalSettings,
     tambahLikuiditas,
     triggerTripleSync,
 
     // SHU & FUNDS
     adminStats,
     shuHistory,
-    bagikanSHU,
+    generateMonthlyBills,
+    releaseProfitSharing,
     allGlobalLogs,
     fetchAllGlobalLogs,
+    closeMembership,
     emergencyWithdraw,
     syncLiquidity,
     cancelPayment,

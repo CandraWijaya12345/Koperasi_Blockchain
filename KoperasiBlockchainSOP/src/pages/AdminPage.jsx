@@ -10,6 +10,7 @@ import AdminSettings from '../components/Admin/AdminSettings';
 import SHUPanel from '../components/Admin/SHUPanel';
 import FundManagement from '../components/Admin/FundManagement';
 import AdminHistory from '../components/Admin/AdminHistory';
+import GovernancePanel from '../components/Admin/GovernancePanel';
 import { useState, useEffect } from 'react';
 
 // --- ICONS (Simple, Clean SVGs) ---
@@ -34,9 +35,6 @@ const ChartIcon = ({ active }) => (
 const SettingsIcon = ({ active }) => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={active ? "#3b82f6" : "#94a3b8"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
 );
-const SearchIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-);
 const HistoryIcon = ({ active }) => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={active ? "#3b82f6" : "#94a3b8"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8v4l3 3"></path><circle cx="12" cy="12" r="9"></circle></svg>
 );
@@ -56,18 +54,20 @@ const AdminPage = () => {
     memberList,
     mintToken,
     tolakPinjaman,
-    setSukuBunga,
-    setDendaHarian,
+    updateGlobalSettings,
     tambahLikuiditas,
     adminStats,
     shuHistory,
-    bagikanSHU,
     allSimpananLogs,
     allGlobalLogs,
     fetchAllGlobalLogs,
     emergencyWithdraw,
-    fundStats,
-    syncLiquidity
+    syncLiquidity,
+    approveSurvey,
+    approveCommittee,
+    generateMonthlyBills,
+    releaseProfitSharing,
+    closeMembership
   } = useKoperasi(account);
 
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -83,7 +83,6 @@ const AdminPage = () => {
   // ===============================
   // PROTEKSI AKSES ADMIN
   // ===============================
-  // Jika belum connect -> tampilkan UI connect (sama seperti sebelumnya)
   if (!account) {
     return (
       <div style={{ ...layout.pageWrapper, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
@@ -117,7 +116,6 @@ const AdminPage = () => {
     );
   }
 
-  // Jika sudah connect tetapi bukan pengurus -> tampilkan notifikasi akses ditolak (tetap gunakan UI yang sama)
   if (account && !isPengurus) {
     return (
       <div style={{ ...layout.pageWrapper, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
@@ -166,18 +164,14 @@ const AdminPage = () => {
     );
   }
 
-  // ===============================
-  // ADMIN DASHBOARD
-  // ===============================
   return (
     <div style={layout.pageWrapper}>
       <div style={styles.shell}>
-        {/* SIDEBAR */}
         <aside style={styles.sidebar}>
           <div style={styles.sidebarHeader}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ width: '32px', height: '32px', background: '#3b82f6', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold' }}>K</div>
-              <span style={styles.brandLogo}>Koperasi<span style={{ color: '#94a3b8' }}>Kita</span></span>
+              <div style={{ width: '32px', height: '32px', background: '#3b82f6', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold' }}>JD</div>
+              <span style={styles.brandLogo}>JDCOOP <span style={{ color: '#94a3b8' }}>Admin</span></span>
             </div>
           </div>
 
@@ -186,83 +180,56 @@ const AdminPage = () => {
             <div style={styles.menuLabel}>Management</div>
             <SidebarItem icon={<UserIcon active={activeTab === 'anggota'} />} label="Anggota" active={activeTab === 'anggota'} onClick={() => setActiveTab('anggota')} />
             <SidebarItem icon={<LoanIcon active={activeTab === 'pinjaman'} />} label="Pinjaman" active={activeTab === 'pinjaman'} onClick={() => setActiveTab('pinjaman')} />
-            <div style={styles.menuLabel}>Finance</div>
-            <SidebarItem icon={<MoneyIcon active={activeTab === 'simpanan'} />} label="Simpanan" active={activeTab === 'simpanan'} onClick={() => setActiveTab('simpanan')} />
-            <SidebarItem icon={<WalletIcon active={activeTab === 'penarikan'} />} label="Likuiditas" active={activeTab === 'penarikan'} onClick={() => setActiveTab('penarikan')} />
+            <div style={styles.menuLabel}>Finance & Gov</div>
+            <SidebarItem icon={<MoneyIcon active={activeTab === 'governance'} />} label="Governance" active={activeTab === 'governance'} onClick={() => setActiveTab('governance')} />
+            <SidebarItem icon={<WalletIcon active={activeTab === 'likuiditas'} />} label="Likuiditas" active={activeTab === 'likuiditas'} onClick={() => setActiveTab('likuiditas')} />
             <SidebarItem icon={<HistoryIcon active={activeTab === 'riwayat'} />} label="Riwayat" active={activeTab === 'riwayat'} onClick={() => setActiveTab('riwayat')} />
-            <SidebarItem icon={<ChartIcon active={activeTab === 'shu'} />} label="SHU" active={activeTab === 'shu'} onClick={() => setActiveTab('shu')} />
             <div style={{ flex: 1 }}></div>
             <SidebarItem icon={<SettingsIcon active={activeTab === 'pengaturan'} />} label="Settings" active={activeTab === 'pengaturan'} onClick={() => setActiveTab('pengaturan')} />
           </nav>
         </aside>
 
-        {/* MAIN AREA */}
         <div style={styles.main}>
-          {/* TOPBAR */}
-          <header style={styles.topbar}>
-          </header>
+          <header style={styles.topbar}></header>
 
-          {/* MESSAGE */}
           {globalMessage && (
             <div style={styles.messageBanner}>
-              <span style={{ fontSize: '1.1rem' }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-              </span>
+              <span style={{ fontSize: '1.1rem' }}>ℹ️</span>
               <span style={{ fontSize: '0.9rem' }}>{globalMessage}</span>
             </div>
           )}
 
-          {/* GAS WARNING */}
-          {adminStats.adminPolBalance && Number(adminStats.adminPolBalance) < 0.05 && (
+          {adminStats.adminPolBalance && Number(adminStats.adminPolBalance) < 0.1 && (
             <div style={{ ...styles.messageBanner, background: '#fff7ed', color: '#c2410c', borderColor: '#fdba74', marginBottom: '10px' }}>
-              <span style={{ fontSize: '1.1rem' }}>⚠️</span>
-              <span style={{ fontSize: '0.9rem', fontWeight: 600, marginLeft: '8px' }}>
-                Saldo POL Admin Sangat Rendah ({adminStats.adminPolBalance} POL). Harap segera isi ulang saldo POL di wallet admin agar transaksi tidak gagal.
-              </span>
+              <span>⚠️ Saldo POL Rendah: {adminStats.adminPolBalance} POL</span>
             </div>
           )}
 
-          {/* CONTENT */}
           <main style={styles.content}>
-            {/* === DASHBOARD VIEW === */}
             {activeTab === 'dashboard' && (
               <>
                 <div style={{ marginBottom: '24px' }}>
                   <h1 style={styles.welcomeTitle}>Dashboard Overview</h1>
-                  <p style={{ color: '#64748b', fontSize: '0.9rem' }}>Welcome back, here is what's happening today.</p>
                 </div>
-
-                {/* STAT CARDS */}
                 <section style={styles.statsRow}>
-                  <StatCard label="Pending Loans" value={pendingLoans ? pendingLoans.length : 0} trend="Requires Action" urgent />
-                  <StatCard label="Approved Today" value={isLoading ? '...' : approvedTodayCount} trend="Requests processed" />
+                  <StatCard label="Pending Loans" value={allLoans.pending ? allLoans.pending.length : 0} trend="Requires Action" urgent />
+                  <StatCard label="Active Loans" value={allLoans.active ? allLoans.active.length : 0} trend="Performing" />
                   <StatCard label="Total Members" value={memberList.length} trend="Active users" />
-                  <StatCard label="Current Interest" value={adminConfig.bunga ? `${adminConfig.bunga}%` : '-'} trend="Flat rate" />
+                  <StatCard label="Interest (Simpanan)" value={`${adminConfig.bunga}%`} trend="Annual" />
                 </section>
-
                 <div style={styles.mainGrid}>
                   <div style={styles.bigCard}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                      <h2 style={styles.cardTitle}>Recent Members</h2>
-                      <button onClick={() => setActiveTab('anggota')} style={styles.linkButton}>View All</button>
-                    </div>
-                    <MemberList
-                      members={memberList.slice(0, 5)}
-                      onMint={mintToken}
-                      isLoading={isLoading}
-                      simpananLogs={allSimpananLogs}
-                      compact={true}
-                    />
+                    <h2 style={{ ...styles.cardTitle, marginBottom: '20px' }}>Recent Members</h2>
+                    <MemberList members={memberList.slice(0, 5)} onMint={mintToken} isLoading={isLoading} simpananLogs={allSimpananLogs} compact={true} onCloseMembership={closeMembership} />
                   </div>
                   <div style={styles.sideCard}>
-                    <div style={{ marginBottom: '16px' }}>
-                      <h2 style={styles.cardTitle}>Approval Queue</h2>
-                    </div>
-                    <AdminPanel
-                      pendingLoans={pendingLoans}
-                      onApprove={setujuiPinjaman}
-                      onReject={tolakPinjaman}
-                      isLoading={isLoading}
+                    <AdminPanel 
+                      pendingLoans={allLoans.pending ? allLoans.pending.slice(0, 3) : []} 
+                      onApprove={setujuiPinjaman} 
+                      onReject={tolakPinjaman} 
+                      onApproveSurvey={approveSurvey}
+                      onApproveCommittee={approveCommittee}
+                      isLoading={isLoading} 
                     />
                   </div>
                 </div>
@@ -272,42 +239,53 @@ const AdminPage = () => {
             {activeTab === 'anggota' && (
               <div style={styles.pageCard}>
                 <h2 style={styles.pageTitle}>Member Management</h2>
-                <MemberList members={memberList} isLoading={isLoading} simpananLogs={allSimpananLogs} />
-              </div>
-            )}
-
-            {activeTab === 'simpanan' && (
-              <div style={styles.pageCard}>
-                <h2 style={styles.pageTitle}>Savings Overview</h2>
-                <MemberList members={memberList} isLoading={isLoading} simpananLogs={allSimpananLogs} />
+                <MemberList members={memberList} isLoading={isLoading} simpananLogs={allSimpananLogs} onMint={mintToken} onCloseMembership={closeMembership} />
               </div>
             )}
 
             {activeTab === 'pinjaman' && (
-              <LoanManagement allLoans={allLoans} onApprove={setujuiPinjaman} onReject={tolakPinjaman} isLoading={isLoading} />
-            )}
-
-            {activeTab === 'penarikan' && (
-              <FundManagement stats={adminStats} onWithdraw={emergencyWithdraw} onAddLiquidity={tambahLikuiditas} onSync={syncLiquidity} isLoading={isLoading} />
-            )}
-
-            {activeTab === 'shu' && (
-              <SHUPanel stats={adminStats} history={shuHistory} members={memberList} onDistribute={bagikanSHU} isLoading={isLoading} />
-            )}
-
-            {activeTab === 'riwayat' && (
               <div style={styles.pageCard}>
-                <h2 style={styles.pageTitle}>Global Transaction History</h2>
-                <AdminHistory 
-                  logs={allGlobalLogs} 
-                  onRefresh={fetchAllGlobalLogs} 
+                <LoanManagement 
+                  allLoans={allLoans} 
+                  onApprove={setujuiPinjaman} 
+                  onReject={tolakPinjaman} 
+                  onApproveSurvey={approveSurvey} 
+                  onApproveCommittee={approveCommittee} 
                   isLoading={isLoading} 
                 />
               </div>
             )}
 
+            {activeTab === 'governance' && (
+              <div style={styles.pageCard}>
+                <GovernancePanel 
+                  stats={adminStats} 
+                  onSync={syncLiquidity} 
+                  onGenerateBills={generateMonthlyBills} 
+                  onReleaseSharing={releaseProfitSharing} 
+                  isLoading={isLoading} 
+                />
+              </div>
+            )}
+
+            {activeTab === 'likuiditas' && (
+              <div style={styles.pageCard}>
+                <h2 style={styles.pageTitle}>Financial & Liquidity</h2>
+                <FundManagement stats={adminStats} onWithdraw={emergencyWithdraw} onAddLiquidity={tambahLikuiditas} onSync={syncLiquidity} isLoading={isLoading} />
+              </div>
+            )}
+
+            {activeTab === 'riwayat' && (
+              <div style={styles.pageCard}>
+                <h2 style={styles.pageTitle}>Global Transaction History</h2>
+                <AdminHistory logs={allGlobalLogs} onRefresh={fetchAllGlobalLogs} isLoading={isLoading} />
+              </div>
+            )}
+
             {activeTab === 'pengaturan' && (
-              <AdminSettings config={adminConfig} onSetBunga={setSukuBunga} onSetDenda={setDendaHarian} isLoading={isLoading} />
+              <div style={styles.pageCard}>
+                <AdminSettings config={adminConfig} onUpdate={updateGlobalSettings} isLoading={isLoading} />
+              </div>
             )}
           </main>
         </div>

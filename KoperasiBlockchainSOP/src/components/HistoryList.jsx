@@ -21,7 +21,10 @@ const typeConfig = {
         <line x1="12" y1="19" x2="12" y2="5" /><polyline points="5 12 12 5 19 12" />
       </svg>
     ),
-    getLabel: (args) => `Simpanan ${getArg(args, 'jenisSimpanan', 2) || ''}`,
+    getLabel: (args) => {
+      const jenis = getArg(args, 'jenisSimpanan', 2) || '';
+      return jenis.startsWith('Simpanan') ? jenis : `Simpanan ${jenis}`;
+    },
     getAmount: (args) => `+${formatCurrency(formatToken(getArg(args, 'jumlah', 1) || 0))}`,
     sign: '+',
   },
@@ -34,7 +37,10 @@ const typeConfig = {
         <line x1="12" y1="19" x2="12" y2="5" /><polyline points="5 12 12 5 19 12" />
       </svg>
     ),
-    getLabel: (args) => `Simpanan ${getArg(args, 'jenis', 2) || ''}`,
+    getLabel: (args) => {
+      const jenis = getArg(args, 'jenis', 2) || '';
+      return jenis.startsWith('Simpanan') ? jenis : `Simpanan ${jenis}`;
+    },
     getAmount: (args) => `+${formatCurrency(formatToken(getArg(args, 'jumlah', 1) || 0))}`,
     sign: '+',
   },
@@ -126,7 +132,63 @@ const typeConfig = {
       </svg>
     ),
     getLabel: () => 'Pinjaman Lunas',
-    getAmount: (args) => `ID #${Number(getArg(args, 'id', 0) || 0)}`,
+    getAmount: (args) => `ID #${Number(getArg(args, 'loanId', 0) || getArg(args, 'id', 1) || 0)}`,
+    sign: '',
+  },
+  SimpananBerjangkaDibuka: {
+    gradient: 'linear-gradient(135deg, #6366f1, #4f46e5)',
+    bgLight: '#eef2ff',
+    color: '#4f46e5',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+      </svg>
+    ),
+    getLabel: (args) => `Buka Berjangka (${getArg(args, 'tenorBulan', 2) || 0} bln)`,
+    getAmount: (args) => `-${formatCurrency(formatToken(getArg(args, 'amount', 1) || 0))}`,
+    sign: '-',
+  },
+  SimpananBerjangkaDicairkan: {
+    gradient: 'linear-gradient(135deg, #06b6d4, #0891b2)',
+    bgLight: '#ecfeff',
+    color: '#0891b2',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+      </svg>
+    ),
+    getLabel: () => 'Pencairan Berjangka',
+    getAmount: (args) => {
+      const amt = Number(formatToken(getArg(args, 'amount', 1) || 0));
+      const bunga = Number(formatToken(getArg(args, 'bunga', 2) || 0));
+      return `+${formatCurrency(amt + bunga)}`;
+    },
+    sign: '+',
+  },
+  SHUDiterima: {
+    gradient: 'linear-gradient(135deg, #f43f5e, #e11d48)',
+    bgLight: '#fff1f2',
+    color: '#e11d48',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20.42 4.58a5.4 5.4 0 0 0-7.65 0l-.77.78-.77-.78a5.4 5.4 0 0 0-7.65 0C1.46 6.7 1.33 10.28 4 13l8 8 8-8c2.67-2.72 2.54-6.3.42-8.42z" />
+      </svg>
+    ),
+    getLabel: () => 'Bagi Hasil (SHU)',
+    getAmount: (args) => `+${formatCurrency(formatToken(getArg(args, 'jumlah', 1) || 0))}`,
+    sign: '+',
+  },
+  AnggotaRejoin: {
+    gradient: 'linear-gradient(135deg, #22d3ee, #0891b2)',
+    bgLight: '#ecfeff',
+    color: '#0891b2',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="8.5" cy="7" r="4" /><polyline points="17 11 19 13 23 9" />
+      </svg>
+    ),
+    getLabel: () => 'Aktif Kembali (Re-join)',
+    getAmount: () => 'Member',
     sign: '',
   },
 };

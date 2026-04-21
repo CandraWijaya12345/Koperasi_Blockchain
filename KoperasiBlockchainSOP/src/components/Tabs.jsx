@@ -19,6 +19,16 @@ const Tabs = ({ activeTab, onChange }) => {
         className="btn-animate"
         style={{
           ...styles.tab,
+          ...(activeTab === 'berjangka' ? styles.tabActive : {}),
+        }}
+        onClick={() => onChange('berjangka')}
+      >
+        Berjangka
+      </button>
+      <button
+        className="btn-animate"
+        style={{
+          ...styles.tab,
           ...(activeTab === 'pinjaman' ? styles.tabActive : {}),
         }}
         onClick={() => onChange('pinjaman')}
