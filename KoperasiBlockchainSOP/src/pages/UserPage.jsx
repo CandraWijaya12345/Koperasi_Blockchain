@@ -85,8 +85,10 @@ const UserPage = () => {
         setActiveInvoiceUrl(result.invoiceUrl);
         setShowIframe(true);
       }
+      return result;
     } catch (err) {
       console.error("Payment trigger error:", err);
+      throw err; // [FIX] Re-throw so the form can catch and display the specific error
     }
   };
 
@@ -230,6 +232,7 @@ const UserPage = () => {
       <VerificationOverlay 
         isVisible={(isPaymentLocked && !showIframe) || isLoading} 
         message={isPaymentLocked ? "Memverifikasi Pembayaran Anda..." : "Sedang Memproses di Blockchain..."}
+        onCancel={cancelPayment}
       />
 
       {globalMessage && (
@@ -353,10 +356,71 @@ const UserPage = () => {
                     <h3 style={{ fontSize: '1.5rem', fontWeight: '800', color: '#1e40af', marginBottom: '12px' }}>
                         Sedang Mengaktifkan Akun...
                     </h3>
-                    <p style={{ color: '#64748b', fontSize: '1rem', maxWidth: '500px', margin: '0 auto' }}>
+                    <p style={{ color: '#64748b', fontSize: '1rem', maxWidth: '500px', margin: '0 auto', marginBottom: '24px' }}>
                         Pembayaran Anda telah diterima. Kami sedang mendaftarkan identitas Anda ke jaringan blockchain Polygon. 
-                        <b> Mohon jangan tutup atau refresh halaman ini</b>, dashboard akan tampil otomatis sebentar lagi.
+                        <b> Mohon jangan tutup halaman ini</b>, dashboard akan tampil otomatis sebentar lagi.
                     </p>
+                    <button 
+                        onClick={cancelPayment}
+                        style={{
+                            background: '#ffffff',
+                            color: '#64748b',
+                            border: '1px solid #d1d5db',
+                            padding: '10px 20px',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            fontSize: '0.875rem',
+                            fontWeight: '600'
+                        }}
+                    >
+                        Batal & Verifikasi Manual
+                    </button>
+                </div>
+            )}
+
+            {/* [BARU] UNIVERSAL PAYMENT OVERLAY: Untuk Angsuran/Simpanan yang terjebak loading */}
+            {isPaymentLocked && !isActivating && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                    zIndex: 9999,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    textAlign: 'center',
+                    padding: '24px'
+                }}>
+                    <div style={{ marginBottom: '20px' }}>
+                        <svg className="animate-spin" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                        </svg>
+                    </div>
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#1e40af', marginBottom: '8px' }}>
+                        Memverifikasi Pembayaran...
+                    </h3>
+                    <p style={{ color: '#64748b', maxWidth: '400px', marginBottom: '24px' }}>
+                        Kami sedang menunggu konfirmasi dari blockchain. Halaman akan terbuka otomatis. 
+                        Jika lebih dari 1 menit tidak berubah, silakan klik tombol di bawah.
+                    </p>
+                    <button 
+                        onClick={cancelPayment}
+                        style={{
+                            background: '#ffffff',
+                            color: '#ef4444',
+                            border: '1px solid #fee2e2',
+                            padding: '12px 24px',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            fontWeight: '600'
+                        }}
+                    >
+                        Batal & Refresh Manual
+                    </button>
                 </div>
             )}
 

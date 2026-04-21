@@ -381,7 +381,7 @@ async function processPaymentLogics(data) {
                         
                         let isRegistered = false;
                         let pollAttempts = 0;
-                        const maxPolls = 10; // Increased polls
+                        const maxPolls = 25; // Increased polls for UAT Safety (125s window)
 
                         while (!isRegistered && pollAttempts < maxPolls) {
                             pollAttempts++;
@@ -627,10 +627,10 @@ app.post('/api/gov/update-settings', async (req, res) => {
             newSettings.multiBranch !== undefined ? !!newSettings.multiBranch : (current[1] ?? current.multiBranchEnabled),
             newSettings.deductUpfront !== undefined ? !!newSettings.deductUpfront : (current[2] ?? current.deductFeesUpfront),
             newSettings.closePeriod !== undefined ? !!newSettings.closePeriod : (current[3] ?? current.isPeriodClosed),
-            newSettings.pokok !== undefined ? ethers.parseUnits(newSettings.pokok.toString(), 18) : (current[4] ?? current.nominalSimpananPokok),
-            newSettings.adm !== undefined ? ethers.parseUnits(newSettings.adm.toString(), 18) : (current[5] ?? current.nominalAdmPendaftaran),
-            newSettings.minSaldo !== undefined ? ethers.parseUnits(newSettings.minSaldo.toString(), 18) : (current[6] ?? current.minSaldo),
-            newSettings.feeAdmin !== undefined ? ethers.parseUnits(newSettings.feeAdmin.toString(), 18) : (current[7] ?? current.feeAdministrasi),
+            (newSettings.pokok !== undefined && newSettings.pokok !== "") ? ethers.parseUnits(newSettings.pokok.toString(), 18) : (current[4] ?? current.nominalSimpananPokok),
+            (newSettings.adm !== undefined && newSettings.adm !== "") ? ethers.parseUnits(newSettings.adm.toString(), 18) : (current[5] ?? current.nominalAdmPendaftaran),
+            (newSettings.minSaldo !== undefined && newSettings.minSaldo !== "") ? ethers.parseUnits(newSettings.minSaldo.toString(), 18) : (current[6] ?? current.minSaldo),
+            (newSettings.feeAdmin !== undefined && newSettings.feeAdmin !== "") ? ethers.parseUnits(newSettings.feeAdmin.toString(), 18) : (current[7] ?? current.feeAdministrasi),
             newSettings.feeProvisi !== undefined ? BigInt(newSettings.feeProvisi) : (current[8] ?? current.feeProvisiPersen),
             newSettings.feeResiko !== undefined ? BigInt(newSettings.feeResiko) : (current[9] ?? current.feeResikoPersen)
         ];

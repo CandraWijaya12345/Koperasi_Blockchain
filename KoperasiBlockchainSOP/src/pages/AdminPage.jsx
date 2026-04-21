@@ -220,7 +220,7 @@ const AdminPage = () => {
                 <div style={styles.mainGrid}>
                   <div style={styles.bigCard}>
                     <h2 style={{ ...styles.cardTitle, marginBottom: '20px' }}>Recent Members</h2>
-                    <MemberList members={memberList.slice(0, 5)} onMint={mintToken} isLoading={isLoading} simpananLogs={allSimpananLogs} compact={true} onCloseMembership={closeMembership} />
+                    <MemberList members={memberList.slice(0, 5)} onMint={mintToken} isLoading={isLoading} simpananLogs={allGlobalLogs} compact={true} onCloseMembership={closeMembership} />
                   </div>
                   <div style={styles.sideCard}>
                     <AdminPanel 
@@ -239,7 +239,7 @@ const AdminPage = () => {
             {activeTab === 'anggota' && (
               <div style={styles.pageCard}>
                 <h2 style={styles.pageTitle}>Member Management</h2>
-                <MemberList members={memberList} isLoading={isLoading} simpananLogs={allSimpananLogs} onMint={mintToken} onCloseMembership={closeMembership} />
+                <MemberList members={memberList} isLoading={isLoading} simpananLogs={allGlobalLogs} onMint={mintToken} onCloseMembership={closeMembership} />
               </div>
             )}
 
@@ -260,6 +260,7 @@ const AdminPage = () => {
               <div style={styles.pageCard}>
                 <GovernancePanel 
                   stats={adminStats} 
+                  members={memberList}
                   onSync={syncLiquidity} 
                   onGenerateBills={generateMonthlyBills} 
                   onReleaseSharing={releaseProfitSharing} 

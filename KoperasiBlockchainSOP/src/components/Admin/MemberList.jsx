@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { formatToken, formatCurrency } from '../../utils/format';
 import { KOPERASI_CONTRACT_ADDRESS } from '../../utils/constants';
+import HistoryList from '../HistoryList';
 
 // --- STYLES (Moved to top to avoid Temporal Dead Zone errors) ---
 const styles = {
@@ -56,35 +57,40 @@ const MemberDetailModal = ({ member, onClose, allLogs, onCloseMembership }) => {
   const [localLoading, setLocalLoading] = React.useState(false);
   const [showConfirm, setShowConfirm] = React.useState(false);
 
-  // [FIX] BigInt safety: explicitly convert timestamp to Number during sorting
-  // Also filter out any logs that have non-numeric "jumlah" (like system labels)
-  const userLogs = (allLogs || [])
-    .filter(l => l && l.dari && String(l.dari).toLowerCase() === String(member.address).toLowerCase())
-    .filter(l => {
-      if (!l.jumlah) return true;
-      try {
-        BigInt(l.jumlah);
-        return true;
-      } catch (e) {
-        return false;
-      }
-    })
-    .sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0));
+  // [FIX] Filter logs specifically for this member using identical logic to AdminHistory
+  const userLogs = (allLogs || []).filter(log => {
+      if (!log || !log.args) return false;
+      const term = String(member.address).toLowerCase();
+      
+      // Look for the address in any relevant argument (user, peminjam, etc.)
+      const addressString = String(
+        log.args?.user || 
+        log.args?.peminjam || 
+        log.args?.anggota || 
+        log.args?.[0] || 
+        log.args?.[1] || 
+        ''
+      ).toLowerCase();
+      
+      return addressString === term;
+  });
 
   return (
     <div style={modalStyles.overlay}>
       <div style={modalStyles.content}>
         <div style={modalStyles.header}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <div style={{ ...styles.avatar, width: '48px', height: '48px', fontSize: '1.25rem' }}>
+            <div style={{ ...styles.avatar, width: '48px', height: '48px', fontSize: '1.25rem', background: 'linear-gradient(135deg, #3b82f6, #2563eb)', color: 'white', border: 'none' }}>
               {(member.nama || 'A').charAt(0).toUpperCase()}
             </div>
             <div>
-              <h2 style={{ fontSize: '1.125rem', fontWeight: '800', color: '#1e293b', margin: 0 }}>
+              <h2 style={{ fontSize: '1.125rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>
                 {member.nama || 'Tanpa Nama'}
               </h2>
-              <div style={{ fontSize: '0.85rem', color: '#64748b', fontFamily: 'monospace' }}>
-                {member.address}
+              <div style={{ fontSize: '0.85rem', color: '#64748b', fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>{member.address.substring(0, 16)}...</span>
+                <span style={{ color: '#cbd5e1' }}>•</span>
+                <span>ID Anggota #{member.id}</span>
               </div>
             </div>
           </div>
@@ -111,46 +117,13 @@ const MemberDetailModal = ({ member, onClose, allLogs, onCloseMembership }) => {
             </div>
           </div>
 
-          <div style={{ marginTop: '24px' }}>
-             <h3 style={{ fontSize: '0.9rem', fontWeight: '700', color: '#1e293b', marginBottom: '16px', textTransform: 'uppercase' }}>
-               Riwayat Transaksi Terbaru
-             </h3>
-             <div style={modalStyles.logContainer}>
-               {userLogs.length > 0 ? (
-                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                   <thead>
-                     <tr style={{ textAlign: 'left', borderBottom: '1px solid #f1f5f9' }}>
-                       <th style={modalStyles.logTh}>Waktu</th>
-                       <th style={modalStyles.logTh}>Jenis</th>
-                       <th style={{ ...modalStyles.logTh, textAlign: 'right' }}>Jumlah</th>
-                     </tr>
-                   </thead>
-                   <tbody>
-                     {userLogs.map((log, i) => (
-                       <tr key={i} style={{ borderBottom: '1px solid #f8fafc' }}>
-                         <td style={modalStyles.logTd}>{new Date(Number(log.timestamp || 0) * 1000).toLocaleDateString('id-ID')}</td>
-                         <td style={modalStyles.logTd}>
-                           <span style={{ 
-                             padding: '2px 8px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: '700',
-                             backgroundColor: log.jenis === 'Wajib' ? '#eff6ff' : '#f0fdf4',
-                             color: log.jenis === 'Wajib' ? '#2563eb' : '#16a34a'
-                           }}>
-                             {log.jenis}
-                           </span>
-                         </td>
-                         <td style={{ ...modalStyles.logTd, textAlign: 'right', fontWeight: '700', color: '#1e293b' }}>
-                           {formatCurrency(formatToken(log.jumlah || 0n))}
-                         </td>
-                       </tr>
-                     ))}
-                   </tbody>
-                 </table>
-               ) : (
-                 <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>
-                   Belum ada riwayat transaksi ditemukan.
-                 </div>
-               )}
-             </div>
+          <div style={{ marginTop: '28px' }}>
+             {/* Use the standard HistoryList component for consistency */}
+             <HistoryList 
+               history={userLogs} 
+               isLoading={false} 
+               isAdminView={false} 
+             />
           </div>
 
           {/* ADMIN ACTION: CLOSE MEMBERSHIP */}
@@ -336,7 +309,7 @@ const MemberList = ({ members, isLoading, simpananLogs, compact, onCloseMembersh
                     </div>
                   </td>
                   <td style={styles.td}>
-                    {m.address.toLowerCase() === KOPERASI_CONTRACT_ADDRESS.toLowerCase() ? (
+                    {(m.address.toLowerCase() === KOPERASI_CONTRACT_ADDRESS.toLowerCase() || m.nama === 'KOPERASI RESERVE') ? (
                       <div style={{
                         ...styles.statusBadge,
                         backgroundColor: '#f8fafc',

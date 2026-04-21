@@ -279,7 +279,6 @@ contract KoperasiSimpanPinjam is ReentrancyGuard, Ownable {
             dataAnggota[_user].simpananPokok += toPokok;
             alokasi -= toPokok;
             
-            // [FIX] Emit specific event for Pokok allocation
             emit DepositTercatat(_user, toPokok, "Simpanan Pokok", block.timestamp);
         }
 
@@ -289,19 +288,15 @@ contract KoperasiSimpanPinjam is ReentrancyGuard, Ownable {
                 if (tagihanWajib[_user] >= alokasi) tagihanWajib[_user] -= alokasi;
                 else tagihanWajib[_user] = 0;
                 
-                // [FIX] Emit specific event for Wajib allocation
                 emit DepositTercatat(_user, alokasi, "Simpanan Wajib", block.timestamp);
             } else {
                 dataAnggota[_user].simpananSukarela += alokasi;
-                
-                // [FIX] Emit specific event for Sukarela allocation
                 emit DepositTercatat(_user, alokasi, "Simpanan Sukarela", block.timestamp);
             }
         }
 
         totalSimpananSeluruhAnggota += _amount;
         settings.currentLiquidityPool += _amount;
-        // [FIX] Removed the generic hardcoded emit that was causing mislabeling
     }
 
     function memberWithdraw(uint256 _amount) external hanyaAnggota openPeriod nonReentrant {
@@ -423,8 +418,19 @@ contract KoperasiSimpanPinjam is ReentrancyGuard, Ownable {
     function ajukanPinjaman(uint256 _amount, uint256 _tenorBulan) external hanyaAnggota openPeriod nonReentrant {
         require(idPinjamanAktifAnggota[msg.sender] == 0, "Ada pinjaman aktif");
         
-        uint256 collateralAman = dataAnggota[msg.sender].simpananPokok + dataAnggota[msg.sender].simpananWajib;
-        require(_amount <= collateralAman * 3, "Over limit jaminan solid");
+        uint256 totalBerjangka = 0;
+        for (uint i = 0; i < userTimeDeposits[msg.sender].length; i++) {
+            if (userTimeDeposits[msg.sender][i].active) {
+                totalBerjangka += userTimeDeposits[msg.sender][i].amount;
+            }
+        }
+
+        uint256 collateralAman = dataAnggota[msg.sender].simpananPokok + 
+                                 dataAnggota[msg.sender].simpananWajib + 
+                                 dataAnggota[msg.sender].simpananSukarela + 
+                                 totalBerjangka;
+                                 
+        require(_amount <= collateralAman * 3, "Over limit jaminan total ekuitas");
 
         idPinjamanTerakhir++;
         uint256 bungaTotal = (_amount * bungaPinjamanTahunanPersen * _tenorBulan) / 1200;
@@ -469,22 +475,24 @@ contract KoperasiSimpanPinjam is ReentrancyGuard, Ownable {
         uint256 feeResiko = (p.jumlahPinjaman * settings.feeResikoPersen) / 100;
         uint256 totalBiayaLainnya = settings.feeAdministrasi + feeProvisi + feeResiko;
 
-        uint256 amountToMint = p.jumlahPinjaman;
+        uint256 amountToDisburse = p.jumlahPinjaman;
 
         if (settings.deductFeesUpfront) {
             require(p.jumlahPinjaman > totalBiayaLainnya, "Biaya melebihi pinjaman");
-            amountToMint = p.jumlahPinjaman - totalBiayaLainnya;
+            amountToDisburse = p.jumlahPinjaman - totalBiayaLainnya;
             profitBelumDibagi += totalBiayaLainnya; 
         } else {
             p.totalHarusDibayar += totalBiayaLainnya;
         }
         
+        require(settings.currentLiquidityPool >= amountToDisburse, "Likuiditas Koperasi tidak cukup");
+        settings.currentLiquidityPool -= amountToDisburse;
+
         p.status = StatusPinjaman.Aktif;
         p.waktuJatuhTempo = block.timestamp + (p.tenorBulan * 30 days);
         loanBalance[p.peminjam] += p.totalHarusDibayar;
 
         emit PinjamanDisetujui(_loanId, p.peminjam, p.waktuJatuhTempo);
-        // NOTE: Pencairan dana dilakukan secara manual/fiat oleh Admin ke rekening tujuan (Off-chain)
     }
 
     function recordAngsuran(uint256 _loanId, uint256 _amount) external hanyaPengurus openPeriod nonReentrant {
@@ -563,7 +571,6 @@ contract KoperasiSimpanPinjam is ReentrancyGuard, Ownable {
     }
 
     function openSimpananBerjangka(uint256 _amount, uint256 _tenorBulan) external hanyaAnggota openPeriod nonReentrant {
-        require(idPinjamanAktifAnggota[msg.sender] == 0, "Ada pinjaman aktif/pending");
         require(dataAnggota[msg.sender].simpananSukarela >= _amount, "Saldo sukarela kurang");
         
         uint256 estimasiBunga = (_amount * bungaSimpananTahunanPersen * _tenorBulan) / 1200;

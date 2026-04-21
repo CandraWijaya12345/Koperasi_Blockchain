@@ -1,6 +1,6 @@
 import React from 'react';
 
-const VerificationOverlay = ({ isVisible, message = 'Memverifikasi Transaksi di Blockchain...' }) => {
+const VerificationOverlay = ({ isVisible, message = 'Memverifikasi Transaksi di Blockchain...', onCancel }) => {
   if (!isVisible) return null;
 
   return (
@@ -87,6 +87,29 @@ const VerificationOverlay = ({ isVisible, message = 'Memverifikasi Transaksi di 
       <p style={{ marginTop: '24px', fontSize: '0.8rem', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
         Polygon Amoy Network Syncing...
       </p>
+
+      {onCancel && (
+        <button 
+          onClick={onCancel}
+          style={{
+            marginTop: '32px',
+            background: 'rgba(255, 255, 255, 0.1)',
+            backdropFilter: 'blur(4px)',
+            color: 'white',
+            border: '1px solid rgba(255,255,255,0.2)',
+            padding: '12px 24px',
+            borderRadius: '12px',
+            cursor: 'pointer',
+            fontSize: '0.875rem',
+            fontWeight: '600',
+            transition: 'all 0.2s',
+          }}
+          onMouseOver={(e) => { e.target.style.backgroundColor = 'rgba(255,255,255,0.15)'; e.target.style.borderColor = 'rgba(255,255,255,0.4)'; }}
+          onMouseOut={(e) => { e.target.style.backgroundColor = 'rgba(255,255,255,0.1)'; e.target.style.borderColor = 'rgba(255,255,255,0.2)'; }}
+        >
+          Batal & Reset Manual
+        </button>
+      )}
     </div>
   );
 };

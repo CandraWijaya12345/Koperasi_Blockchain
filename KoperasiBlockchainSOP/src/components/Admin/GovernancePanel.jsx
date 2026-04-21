@@ -118,12 +118,136 @@ const localStyles = {
     }
 };
 
-const GovernancePanel = ({ stats, onSync, onGenerateBills, onReleaseSharing, isLoading }) => {
+const SHUConfirmationModal = ({ stats, members, sharingPercent, onConfirm, onCancel, isLoading }) => {
+    const rawProfit = stats.rawProfit || 0n;
+    const rawTotalSimpanan = stats.rawTotalSimpanan || 0n;
+    const amountToDistribute = (rawProfit * BigInt(sharingPercent)) / 100n;
+
+    const simulation = (members || []).map(m => {
+        const sPokok = BigInt(m.sPokok || 0);
+        const sWajib = BigInt(m.sWajib || 0);
+        const sSukarela = BigInt(m.simpananSukarela || 0);
+        const totalMemberSavings = sPokok + sWajib + sSukarela;
+
+        let share = 0n;
+        if (rawTotalSimpanan > 0n) {
+            share = (totalMemberSavings * amountToDistribute) / rawTotalSimpanan;
+        }
+
+        return {
+            nama: m.nama || 'Tanpa Nama',
+            address: m.address,
+            totalSavings: totalMemberSavings,
+            share: share
+        };
+    }).filter(s => s.share > 0n); // Only show members getting something
+
+    return (
+        <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(8px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px'
+        }}>
+            <div style={{
+                backgroundColor: '#fff', borderRadius: '24px', width: '100%', maxWidth: '720px',
+                maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden',
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.3)'
+            }}>
+                <div style={{ padding: '24px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                        <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>Konfirmasi Distribusi SHU</h2>
+                        <p style={{ fontSize: '0.85rem', color: '#64748b', margin: '4px 0 0 0' }}>Review simulasi pembagian sebelum rilis ke Blockchain</p>
+                    </div>
+                    <button onClick={onCancel} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#94a3b8' }}>×</button>
+                </div>
+
+                <div style={{ padding: '24px', overflowY: 'auto' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px' }}>
+                        <div style={{ padding: '16px', borderRadius: '16px', backgroundColor: '#f8fafc', border: '1px solid #f1f5f9' }}>
+                            <div style={{ fontSize: '0.7rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>Total Profit (100%)</div>
+                            <div style={{ fontSize: '1rem', fontWeight: '800', color: '#0f172a' }}>{formatCurrency(formatToken(rawProfit))}</div>
+                        </div>
+                        <div style={{ padding: '16px', borderRadius: '16px', backgroundColor: '#eff6ff', border: '1px solid #dbeafe' }}>
+                            <div style={{ fontSize: '0.7rem', fontWeight: '700', color: '#2563eb', textTransform: 'uppercase', marginBottom: '4px' }}>Alokasi ({sharingPercent}%)</div>
+                            <div style={{ fontSize: '1rem', fontWeight: '800', color: '#1e40af' }}>{formatCurrency(formatToken(amountToDistribute))}</div>
+                        </div>
+                        <div style={{ padding: '16px', borderRadius: '16px', backgroundColor: '#f0fdf4', border: '1px solid #dcfce7' }}>
+                            <div style={{ fontSize: '0.7rem', fontWeight: '700', color: '#16a34a', textTransform: 'uppercase', marginBottom: '4px' }}>Penerima</div>
+                            <div style={{ fontSize: '1rem', fontWeight: '800', color: '#166534' }}>{simulation.length} Anggota</div>
+                        </div>
+                    </div>
+
+                    <h3 style={{ fontSize: '0.85rem', fontWeight: '800', color: '#475569', marginBottom: '12px', textTransform: 'uppercase' }}>Simulasi Pembagian</h3>
+                    <div style={{ borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+                            <thead style={{ backgroundColor: '#f8fafc', textAlign: 'left' }}>
+                                <tr>
+                                    <th style={{ padding: '12px 16px', color: '#64748b', fontWeight: '600' }}>Anggota</th>
+                                    <th style={{ padding: '12px 16px', color: '#64748b', fontWeight: '600', textAlign: 'right' }}>Total Simpanan</th>
+                                    <th style={{ padding: '12px 16px', color: '#64748b', fontWeight: '600', textAlign: 'right' }}>Estimasi SHU</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {simulation.slice(0, 10).map((s, i) => (
+                                    <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                        <td style={{ padding: '12px 16px' }}>
+                                            <div style={{ fontWeight: '600', color: '#1e293b' }}>{s.nama}</div>
+                                            <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontFamily: 'monospace' }}>{s.address.substring(0, 10)}...</div>
+                                        </td>
+                                        <td style={{ padding: '12px 16px', textAlign: 'right', color: '#64748b' }}>
+                                            {formatCurrency(formatToken(s.totalSavings))}
+                                        </td>
+                                        <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '700', color: '#059669' }}>
+                                            {formatCurrency(formatToken(s.share))}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                        {simulation.length > 10 && (
+                            <div style={{ padding: '12px', textAlign: 'center', backgroundColor: '#f8fafc', fontSize: '0.75rem', color: '#94a3b8', fontStyle: 'italic' }}>
+                                ... dan {simulation.length - 10} anggota lainnya
+                            </div>
+                        )}
+                        {simulation.length === 0 && (
+                            <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+                                Tidak ada data simulasi. Pastikan profit ada dan anggota memiliki simpanan.
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div style={{ padding: '24px', backgroundColor: '#f8fafc', borderTop: '1px solid #f1f5f9', display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                    <button 
+                        onClick={onCancel}
+                        style={{ padding: '10px 20px', borderRadius: '10px', border: '1px solid #e2e8f0', backgroundColor: '#fff', fontWeight: '700', cursor: 'pointer' }}
+                    >
+                        Batalkan
+                    </button>
+                    <button 
+                        disabled={isLoading || simulation.length === 0}
+                        onClick={onConfirm}
+                        style={{ 
+                            padding: '10px 24px', borderRadius: '10px', border: 'none', 
+                            backgroundColor: '#059669', color: '#fff', fontWeight: '700', 
+                            cursor: 'pointer', opacity: (isLoading || simulation.length === 0) ? 0.6 : 1
+                        }}
+                    >
+                        {isLoading ? 'Memproses...' : 'Konfirmasi & Distribusikan'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const GovernancePanel = ({ stats, members, onSync, onGenerateBills, onReleaseSharing, isLoading }) => {
   const [billAmount, setBillAmount] = useState('25000');
-  const [sharingPercent, setSharingPercent] = useState('10');
+  const [sharingPercent, setSharingPercent] = useState('100');
   const [msg, setMsg] = useState('');
   const [isError, setIsError] = useState(false);
   const [localLoading, setLocalLoading] = useState(false);
+  const [showConfirmSHU, setShowConfirmSHU] = useState(false);
 
   const handleAction = async (fn, params) => {
     setLocalLoading(true);
@@ -132,6 +256,7 @@ const GovernancePanel = ({ stats, onSync, onGenerateBills, onReleaseSharing, isL
     try {
       await fn(params, (m) => setMsg(m));
       setMsg('Operasi berhasil diselesaikan.');
+      setShowConfirmSHU(false);
       setTimeout(() => setMsg(''), 5000);
     } catch (e) {
       console.error(e);
@@ -205,7 +330,8 @@ const GovernancePanel = ({ stats, onSync, onGenerateBills, onReleaseSharing, isL
           </button>
         </div>
 
-        {/* PROFIT SHARING */}
+        {/* PROFIT SHARING (Hidden for Presentation/UAT) */}
+        {/*
         <div style={localStyles.card}>
           <div style={localStyles.cardHeader}>
             <div style={{ ...localStyles.iconWrapper, backgroundColor: '#ecfdf5', color: '#059669' }}><ProfitIcon /></div>
@@ -229,16 +355,28 @@ const GovernancePanel = ({ stats, onSync, onGenerateBills, onReleaseSharing, isL
           />
           <button 
             style={{ ...localStyles.button, backgroundColor: '#059669' }}
-            onClick={() => handleAction(onReleaseSharing, sharingPercent)}
-            disabled={localLoading || isLoading}
+            onClick={() => setShowConfirmSHU(true)}
+            disabled={localLoading || isLoading || (stats.rawProfit || 0n) === 0n}
           >
-            Rilis Bagi Hasil
+            Mulai Distribusi
           </button>
         </div>
+        */}
 
       </div>
 
       <InlineMessage message={msg} isError={isError} />
+
+      {showConfirmSHU && (
+          <SHUConfirmationModal 
+            stats={stats}
+            members={members}
+            sharingPercent={sharingPercent}
+            onCancel={() => setShowConfirmSHU(false)}
+            onConfirm={() => handleAction(onReleaseSharing, sharingPercent)}
+            isLoading={localLoading}
+          />
+      )}
     </div>
   );
 };

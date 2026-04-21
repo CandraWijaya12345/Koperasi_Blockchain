@@ -135,9 +135,19 @@ export const useKoperasi = (account) => {
 
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isPaymentLocked, setIsPaymentLocked] = useState(false);
-  const [paymentSuccess, setPaymentSuccess] = useState(false);
-  const [paymentType, setPaymentType] = useState('simpanan'); // 'simpanan' or 'angsuran'
+  
+  // [FIX] Persist payment state across page refreshes (for Xendit redirect)
+  const [isPaymentLocked, setIsPaymentLocked] = useState(() => sessionStorage.getItem('isPaymentLocked') === 'true');
+  const [paymentSuccess, setPaymentSuccess] = useState(() => sessionStorage.getItem('paymentSuccess') === 'true');
+  const [paymentType, setPaymentType] = useState(() => sessionStorage.getItem('paymentType') || 'simpanan');
+  const [paymentBaseline, setPaymentBaseline] = useState(() => BigInt(sessionStorage.getItem('paymentBaseline') || '0'));
+
+  useEffect(() => {
+    sessionStorage.setItem('isPaymentLocked', isPaymentLocked);
+    sessionStorage.setItem('paymentType', paymentType);
+    sessionStorage.setItem('paymentSuccess', paymentSuccess);
+    sessionStorage.setItem('paymentBaseline', paymentBaseline.toString());
+  }, [isPaymentLocked, paymentType, paymentSuccess, paymentBaseline]);
 
   const [isPengurus, setIsPengurus] = useState(false);
   const [anggotaData, setAnggotaData] = useState(null);
@@ -419,6 +429,9 @@ export const useKoperasi = (account) => {
 
       // Map ID -> Amount (from PinjamanDiajukan)
       const loanAmounts = {};
+      logsAjukan.forEach(l => {
+          if (l.args && l.args.id) loanAmounts[Number(l.args.id)] = l.args.jumlah;
+      });
       
       const pendingCandidates = enhancedAjukan.filter(l => {
         const id = Number(l.args.id);
@@ -451,10 +464,16 @@ export const useKoperasi = (account) => {
       }).map(l => {
         const id = Number(l.args.id);
         l.amountOverride = loanAmounts[id] || 0n;
+        // [FIX] Support typo in contract (jatubTempo)
+        l.jatuhTempoProp = l.args.jatubTempo || l.args.jatuhTempo || 0;
         return l;
       }).sort((a, b) => b.extractedTimestamp - a.extractedTimestamp);
 
-      const paid = enhancedLunas.sort((a, b) => b.extractedTimestamp - a.extractedTimestamp);
+      const paid = enhancedLunas.map(l => {
+        const id = Number(l.args.loanId || l.args.id);
+        l.amountOverride = loanAmounts[id] || 0n;
+        return l;
+      }).sort((a, b) => b.extractedTimestamp - a.extractedTimestamp);
       const rejected = enhancedDitolak.sort((a, b) => b.extractedTimestamp - a.extractedTimestamp);
       
       setAllLoans({ pending, active, paid, rejected });
@@ -668,7 +687,7 @@ export const useKoperasi = (account) => {
         bungaPinjaman: Number(bPinjaman),
         denda: Number(denda),
         // Indices map: [4] = Pokok, [5] = Adm
-        pokok: Number(ethers.formatUnits(setts[4] || setts.nominalSimpananPokok || 0, 18)),
+        pokok: Number(ethers.formatUnits(setts[4] ?? setts.nominalSimpananPokok ?? 0, 18)),
         adm: 0 // Hidden for JDCOOP compliance
       });
     } catch (e) {
@@ -723,6 +742,7 @@ export const useKoperasi = (account) => {
 
   const approveSurvey = async (loanId, note, onProgress) => {
     try {
+      setIsLoading(true);
       if (onProgress) onProgress('Memproses Persetujuan Survey (Admin)...');
       const response = await fetch('http://localhost:5000/api/loan/survey', {
         method: 'POST',
@@ -736,11 +756,14 @@ export const useKoperasi = (account) => {
     } catch (err) {
       console.error(err);
       throw err;
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const approveCommittee = async (loanId, onProgress) => {
     try {
+      setIsLoading(true);
       if (onProgress) onProgress('Memproses Persetujuan Komite (Admin)...');
       const response = await fetch('http://localhost:5000/api/loan/committee', {
         method: 'POST',
@@ -754,6 +777,8 @@ export const useKoperasi = (account) => {
     } catch (err) {
       console.error(err);
       throw err;
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -867,8 +892,17 @@ export const useKoperasi = (account) => {
       setAnggotaData(formattedData);
 
       if (formattedData.terdaftar) {
-        const total = BigInt(formattedData.simpananPokok) + BigInt(formattedData.simpananWajib) + BigInt(formattedData.simpananSukarela);
-        setTotalSimpanan(formatToken(total));
+        // [SYNC] Fetch Time Deposits to calculate Total Equity (Loan Limit baseline)
+        const deposits = await fetchUserTimeDeposits(kop, addr);
+        const totalBerjangka = deposits.reduce((sum, d) => d.active ? sum + BigInt(d.amount) : sum, 0n);
+        setUserTimeDeposits(deposits);
+
+        const totalEquity = BigInt(formattedData.simpananPokok) + 
+                            BigInt(formattedData.simpananWajib) + 
+                            BigInt(formattedData.simpananSukarela) + 
+                            totalBerjangka;
+        
+        setTotalSimpanan(formatToken(totalEquity));
 
         const idPinjamanAktif = await kop.idPinjamanAktifAnggota(addr);
         if (Number(idPinjamanAktif) > 0) {
@@ -915,8 +949,7 @@ export const useKoperasi = (account) => {
 
         await fetchHistory(addr, kop);
         
-        const deposits = await fetchUserTimeDeposits(kop, addr);
-        setUserTimeDeposits(deposits);
+        await fetchHistory(addr, kop);
       } else {
         setPinjamanAktif(null);
         setPendingLoanUser(null);
@@ -1055,6 +1088,7 @@ export const useKoperasi = (account) => {
           fetchAllLoansAdmin(kop);
           fetchAllMembers(kop);
           fetchAllSimpananLogs(kop);
+          fetchAllGlobalLogs(kop); // [FIX] Ensure global logs are fetched on init
           fetchAdminStats(kop, token);
         }
       } catch (err) {
@@ -1103,13 +1137,10 @@ export const useKoperasi = (account) => {
       if (onProgress) onProgress('Memproses pendaftaran...');
       // 1. Simpan Pending ke Server (agar data tidak hilang jika tab tertutup)
       console.log("[Daftar] Saving pending reg to server for:", account);
-      const res = await fetch('http://localhost:5000/api/admin/pending-pendaftaran', {
+      const res = await fetch('http://localhost:5000/api/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          address: account, 
-          params: params 
-        })
+        body: JSON.stringify({ params })
       });
       const data = await res.json();
       if (!data.success) {
@@ -1163,9 +1194,27 @@ export const useKoperasi = (account) => {
       const invoiceUrl = data.invoiceUrl;
       console.log("Xendit Invoice URL:", invoiceUrl);
 
-      setPaymentType('simpanan');
+      // [FIX] Determine actual type
+      const actualType = isWajib === 'POKOK' ? 'POKOK' : (isWajib ? 'wajib' : 'simpanan');
+      
       if (onProgress) onProgress('Halaman pembayaran disiapkan. Menunggu verifikasi otomatis...');
 
+      // [CRITICAL] Synchronous persistence to prevent race condition on refresh/redirect
+      let baseline = "0";
+      try {
+          if (idrTokenContract) {
+            const b = await idrTokenContract.balanceOf(account);
+            baseline = b.toString();
+          }
+      } catch (e) { console.warn("Failed to capture pre-payment baseline:", e); }
+
+      sessionStorage.setItem('isPaymentLocked', 'true');
+      sessionStorage.setItem('paymentType', actualType);
+      sessionStorage.setItem('paymentBaseline', baseline);
+      sessionStorage.setItem('paymentSuccess', 'false');
+
+      setPaymentType(actualType);
+      setPaymentBaseline(BigInt(baseline));
       setIsPaymentLocked(true);
       paymentChannel.postMessage({ type: 'PAYMENT_LOCKED' });
 
@@ -1234,8 +1283,9 @@ export const useKoperasi = (account) => {
         const wajib = BigInt(anggotaData.simpananWajib || 0);
         const sukarela = BigInt(anggotaData.simpananSukarela || 0);
 
-        const totalSimpanan = pokok + wajib + sukarela;
-        const limit = totalSimpanan * 3n; // Use 3n literal
+        const totalBerjangka = userTimeDeposits.reduce((sum, d) => d.active ? sum + BigInt(d.amount) : sum, 0n);
+        const totalEquity = pokok + wajib + sukarela + totalBerjangka;
+        const limit = totalEquity * 3n;
 
         const amountBigInt = parseToken(jumlahStr);
         if (amountBigInt > limit) {
@@ -1271,7 +1321,7 @@ export const useKoperasi = (account) => {
         // Don't fail the whole process if this fails, but it's risky.
       }
 
-      await fetchUserData(account, koperasiContract, idrTokenContract);
+      triggerTripleSync();
       return tx;
     } catch (err) {
       console.error(err);
@@ -1316,7 +1366,16 @@ export const useKoperasi = (account) => {
 
       if (onProgress) onProgress('Halaman pembayaran Xendit telah disiapkan.');
 
+      const baseline = sudahBayar.toString();
+      
+      // [CRITICAL] Synchronous persistence to prevent race condition on refresh/redirect
+      sessionStorage.setItem('isPaymentLocked', 'true');
+      sessionStorage.setItem('paymentType', 'angsuran');
+      sessionStorage.setItem('paymentBaseline', baseline);
+      sessionStorage.setItem('paymentSuccess', 'false');
+
       setPaymentType('angsuran');
+      setPaymentBaseline(BigInt(baseline));
       setIsPaymentLocked(true);
 
       // [FIX] Return invoiceUrl for Iframe support
@@ -1343,7 +1402,7 @@ export const useKoperasi = (account) => {
       if (onProgress) onProgress('Menunggu konfirmasi pelunasan...');
       await tx.wait();
       
-      await refresh();
+      triggerTripleSync();
       return tx;
     } catch (err) {
       console.error(err);
@@ -1365,7 +1424,7 @@ export const useKoperasi = (account) => {
       if (onProgress) onProgress('Menunggu konfirmasi blockchain...');
       await tx.wait();
       
-      await refresh(); // Refresh all data
+      triggerTripleSync();
       return tx;
     } catch (err) {
       console.error(err);
@@ -1385,7 +1444,7 @@ export const useKoperasi = (account) => {
       if (onProgress) onProgress('Menunggu konfirmasi pencairan...');
       await tx.wait();
       
-      await refresh();
+      triggerTripleSync();
       return tx;
     } catch (err) {
       console.error(err);
@@ -1446,6 +1505,7 @@ export const useKoperasi = (account) => {
     if (!koperasiContract || !idrTokenContract) throw new Error("Kontrak belum siap");
 
     try {
+      setIsLoading(true);
       // 1. Check Liquidity First via Server (Source of Truth)
       if (onProgress) onProgress('Memeriksa likuiditas koperasi...');
       const loanData = await koperasiContract.dataPinjaman(idStr);
@@ -1505,6 +1565,8 @@ export const useKoperasi = (account) => {
     } catch (err) {
       console.error(err);
       throw err;
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -1567,10 +1629,9 @@ export const useKoperasi = (account) => {
       if (!syncData.success) throw new Error(syncData.error || "Gagal sinkronisasi via server");
 
       if (onProgress) onProgress('Sinkronisasi selesai!');
-
-      // Wait a bit for blockchain to update before fetching stats
-      await new Promise(r => setTimeout(r, 2000));
-      await fetchFundStats();
+      
+      // [FIX] TripleSync for consistency during UAT
+      triggerTripleSync();
       return true;
     } catch (err) {
       console.error(err);
@@ -1642,19 +1703,16 @@ export const useKoperasi = (account) => {
       // Clean URL IMMEDIATELY to prevent loop before state takes effect
       window.history.replaceState({}, document.title, window.location.pathname);
       
-      // OPTIONAL: use session storage to ensure we only trigger the effect ONCE per refresh
       const lastProcessedTime = sessionStorage.getItem('last_processed_payment');
       const now = Date.now();
       
       // Only trigger if not processed in the last 10 seconds (prevents double fire)
       if (!lastProcessedTime || (now - Number(lastProcessedTime) > 10000)) {
-        console.log("[Payment] Success detected from URL, setting state...");
-        setPaymentSuccess(true);
-        setIsPaymentLocked(false);
+        console.log("[Payment] Redirect success detected. Keeping UI locked until Blockchain reflects change...");
+        // [FIX] We stay locked. The polling loop will handle setPaymentSuccess(true) 
+        // once the blockchain data actually changes.
+        setIsPaymentLocked(true);
         sessionStorage.setItem('last_processed_payment', now.toString());
-
-        // [FIX] Trigger Aggressive Triple-Sync to catch late blockchain confirmations
-        triggerTripleSync();
       }
     }
 
@@ -1682,21 +1740,60 @@ export const useKoperasi = (account) => {
 
       console.log(`[Polling] Initializing baseline for ${paymentType}...`);
 
-      let baselineValue = 0n;
+      let baselineValue = paymentBaseline;
 
       try {
-        // Fetch BASELINE directly from blockchain at the moment of locking
-        if (paymentType === 'simpanan') {
-          baselineValue = await idrTokenContract.balanceOf(account);
-        } else {
-          const id = await koperasiContract.idPinjamanAktifAnggota(account);
-          if (Number(id) > 0) {
-            const loan = await koperasiContract.dataPinjaman(id);
-            baselineValue = loan.sudahDibayar || loan[4]; // Handle struct/array
+        // Fetch BASELINE if not already set (e.g. if we missed the pre-payment capture)
+        if (baselineValue === 0n) {
+          if (paymentType === 'simpanan' || paymentType === 'POKOK' || paymentType === 'wajib') {
+            baselineValue = await idrTokenContract.balanceOf(account);
+          } else {
+            const id = await koperasiContract.idPinjamanAktifAnggota(account);
+            if (Number(id) > 0) {
+              const loan = await koperasiContract.dataPinjaman(id);
+              baselineValue = loan.sudahDibayar || loan[4];
+            }
           }
+          setPaymentBaseline(baselineValue);
         }
 
         console.log(`[Polling] Baseline set: ${baselineValue.toString()}. Waiting for increase...`);
+
+        // [NEW] "Already Finished" check to prevent infinite lock if transaction settled during redirect
+        let alreadyFinished = false;
+        if (paymentType === 'POKOK') {
+          const [currentBal, member] = await Promise.all([
+            idrTokenContract.balanceOf(account),
+            koperasiContract.dataAnggota(account)
+          ]);
+          const isReg = member.terdaftar || (typeof member[0] === 'boolean' && member[0]);
+          if (isReg && currentBal > baselineValue) alreadyFinished = true;
+        } else if (paymentType === 'simpanan' || paymentType === 'wajib') {
+          const currentBal = await idrTokenContract.balanceOf(account);
+          if (currentBal > baselineValue) alreadyFinished = true;
+        } else if (paymentType === 'angsuran') {
+          const id = await koperasiContract.idPinjamanAktifAnggota(account);
+          if (Number(id) > 0) {
+            const loan = await koperasiContract.dataPinjaman(id);
+            const currentRepaid = (loan.sudahDibayar || loan[4]);
+            if (BigInt(currentRepaid.toString()) > baselineValue) alreadyFinished = true;
+          } else {
+            // [FALLBACK] If no active loan but we were paying one, it might be finished
+            const member = await koperasiContract.dataAnggota(account);
+            if (Number(member.idPinjamanAktif || member[11]) === 0) alreadyFinished = true;
+          }
+        }
+
+        if (alreadyFinished) {
+          console.log("[Polling] SUCCESS! Blockchain already reflected the change.");
+          await fetchUserData(account, koperasiContract, idrTokenContract);
+          setPaymentSuccess(true);
+          setIsPaymentLocked(false);
+          sessionStorage.removeItem('isPaymentLocked');
+          sessionStorage.removeItem('paymentBaseline');
+          triggerTripleSync();
+          return;
+        }
 
         if (!isMounted) return;
 
@@ -1712,8 +1809,10 @@ export const useKoperasi = (account) => {
               ]);
 
               if (paymentType === 'POKOK') {
-                  if (member.terdaftar || (typeof member[0] === 'boolean' && member[0])) {
-                      console.log("[Polling] Registration confirmed ACTIVE on blockchain.");
+                  const isReg = member.terdaftar || (typeof member[0] === 'boolean' && member[0]);
+                  // [FIX] Wait for both registration status AND the initial deposit to be 'printed'
+                  if (isReg && currentBalance > baselineValue) {
+                      console.log("[Polling] Registration & Balance confirmed on blockchain.");
                       successTriggered = true;
                   }
               } else {
@@ -1722,26 +1821,37 @@ export const useKoperasi = (account) => {
             } else {
               // Repayment check
               const id = await koperasiContract.idPinjamanAktifAnggota(account);
+              console.log(`[Polling] Repayment check. Active Loan ID: ${id}. Waiting > ${baselineValue.toString()}`);
               if (Number(id) > 0) {
                 const loan = await koperasiContract.dataPinjaman(id);
-                const currentRepaid = loan.sudahDibayar || loan[4];
+                const currentRepaid = BigInt((loan.sudahDibayar || loan[4]).toString());
+                console.log(`[Polling] Current Repaid: ${currentRepaid.toString()}`);
                 if (currentRepaid > baselineValue) successTriggered = true;
+              } else {
+                // [FALLBACK] If loan is gone, it's likely finished/success
+                console.log("[Polling] Active loan ID is 0. Assuming repayment success (loan finished).");
+                successTriggered = true;
               }
             }
 
-            if (successTriggered && isMounted) {
-              console.log(`[Polling] SUCCESS! ${paymentType} detected.`);
-              clearInterval(interval);
-              
-              // [FIX] Immediate state refresh before unlocking
-              await fetchUserData(account, koperasiContract, idrTokenContract);
-              
-              setPaymentSuccess(true);
-              setIsPaymentLocked(false);
+              if (successTriggered && isMounted) {
+                console.log(`[Polling] SUCCESS! ${paymentType} detected.`);
+                clearInterval(interval);
+                
+                // [FIX] Immediate state refresh before unlocking
+                await fetchUserData(account, koperasiContract, idrTokenContract);
+                
+                setPaymentSuccess(true);
+                setIsPaymentLocked(false);
+                
+                // [NEW] Clear persistence once done
+                sessionStorage.removeItem('isPaymentLocked');
+                sessionStorage.removeItem('paymentType');
+                sessionStorage.removeItem('paymentBaseline');
 
-              // [FIX] Unified Triple-Sync Strategy for final consistency
-              triggerTripleSync();
-            }
+                // [FIX] Unified Triple-Sync Strategy for final consistency
+                triggerTripleSync();
+              }
           } catch (pollErr) {
             console.warn("[Polling] Tick error:", pollErr);
           }
@@ -1765,6 +1875,12 @@ export const useKoperasi = (account) => {
   const cancelPayment = () => {
     setIsPaymentLocked(false);
     setPaymentSuccess(false);
+    sessionStorage.removeItem('isPaymentLocked');
+    sessionStorage.removeItem('paymentType');
+    sessionStorage.removeItem('paymentBaseline');
+    sessionStorage.removeItem('paymentSuccess');
+    sessionStorage.removeItem('last_processed_payment');
+    console.log("[Payment] Manual reset triggered. All payment states cleared.");
   };
 
   return {
@@ -1798,6 +1914,7 @@ export const useKoperasi = (account) => {
     approveCommittee,
     bayarAngsuranInternal,
     cairkanSimpananBerjangka,
+    cancelPayment,
 
     refresh,
     approvedTodayCount,

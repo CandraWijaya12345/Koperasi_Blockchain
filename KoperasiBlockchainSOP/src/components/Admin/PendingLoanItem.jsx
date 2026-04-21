@@ -158,13 +158,35 @@ const PendingLoanItem = ({ log, loan, onApprove, onReject, onApproveSurvey, onAp
           <div style={{ display: 'flex', gap: '12px' }}>
             <button 
               onClick={() => setConfirmAction('approve')}
-              style={{ flex: 2, background: status === 2 ? '#10b981' : '#2563eb', color: '#fff', border: 'none', padding: '12px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer' }}
+              disabled={isActing}
+              style={{ 
+                flex: 2, 
+                background: status === 2 ? '#10b981' : '#2563eb', 
+                color: '#fff', 
+                border: 'none', 
+                padding: '12px', 
+                borderRadius: '10px', 
+                fontWeight: '700', 
+                cursor: isActing ? 'not-allowed' : 'pointer',
+                opacity: isActing ? 0.6 : 1
+              }}
             >
               {getButtonText()}
             </button>
             <button 
               onClick={() => setConfirmAction('reject')}
-              style={{ flex: 1, background: '#fff', color: '#ef4444', border: '1px solid #ef4444', padding: '12px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer' }}
+              disabled={isActing}
+              style={{ 
+                flex: 1, 
+                background: '#fff', 
+                color: '#ef4444', 
+                border: '1px solid #ef4444', 
+                padding: '12px', 
+                borderRadius: '10px', 
+                fontWeight: '700', 
+                cursor: isActing ? 'not-allowed' : 'pointer',
+                opacity: isActing ? 0.6 : 1
+              }}
             >
               Tolak
             </button>
