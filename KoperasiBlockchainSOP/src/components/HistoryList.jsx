@@ -213,8 +213,13 @@ const HistoryList = ({ history, onRefresh, isLoading, isAdminView }) => {
   // Group history by date
   const groupByDate = (items) => {
     if (!items || items.length === 0) return {};
+    // [PRESENTASI] Sembunyikan history SHU
+    const filteredItems = items.filter(item => {
+      const name = item.eventName || item.fragment?.name || "";
+      return name !== 'SHUDiterima' && name !== 'BagiHasilDirilis' && name !== 'BagiHasilBatchDirilis';
+    });
     const groups = {};
-    items.forEach(item => {
+    filteredItems.forEach(item => {
       const ts = item.extractedTimestamp || Number(item.args?.waktu) || 0;
       const dateKey = ts ? new Date(ts * 1000).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : 'Tidak Diketahui';
       if (!groups[dateKey]) groups[dateKey] = [];

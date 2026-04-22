@@ -175,13 +175,17 @@ const formatIDR = (val) => {
     return new Intl.NumberFormat('id-ID').format(val || 0);
 };
 
-const AdminSettings = ({ config, onUpdate, isLoading }) => {
+const AdminSettings = ({ config, onUpdate, isLoading, systemStatus }) => {
     const [formData, setFormData] = useState({
         bungaSimpanan: '9', // Max limit is 9%
         bungaPinjaman: '12',
         dendaHarian: '1',
         pokok: '100000',
-        adm: '0'
+        wajib: '25000',
+        feeAdmin: '0',
+        feeProvisi: '0',
+        feeResiko: '0',
+        deductUpfront: false
     });
 
     const [msg, setMsg] = useState('');
@@ -196,7 +200,11 @@ const AdminSettings = ({ config, onUpdate, isLoading }) => {
                 bungaPinjaman: config.bungaPinjaman?.toString() || '12',
                 dendaHarian: config.denda?.toString() || '1',
                 pokok: config.pokok?.toString() || '100000',
-                adm: config.adm?.toString() || '0'
+                wajib: config.wajib?.toString() || '25000',
+                feeAdmin: config.feeAdmin?.toString() || '0',
+                feeProvisi: config.feeProvisi?.toString() || '0',
+                feeResiko: config.feeResiko?.toString() || '0',
+                deductUpfront: !!config.deductUpfront
             });
         }
     }, [config, localLoading]);
@@ -213,7 +221,11 @@ const AdminSettings = ({ config, onUpdate, isLoading }) => {
                 bungaPinjaman: parseInt(formData.bungaPinjaman),
                 dendaHarian: parseInt(formData.dendaHarian),
                 pokok: formData.pokok,
-                adm: formData.adm
+                wajib: formData.wajib,
+                feeAdmin: formData.feeAdmin,
+                feeProvisi: parseInt(formData.feeProvisi),
+                feeResiko: parseInt(formData.feeResiko),
+                deductUpfront: formData.deductUpfront
             };
             await onUpdate(params, (m) => setMsg(m));
             setMsg('Parameter berhasil diperbarui! Menunggu sinkronisasi akhir...');
@@ -244,7 +256,7 @@ const AdminSettings = ({ config, onUpdate, isLoading }) => {
                     <div style={localStyles.summaryItem}>
                         <span style={localStyles.summaryLabel}>Simpanan Pokok</span>
                         <span style={localStyles.summaryValue}>Rp {formatIDR(config?.pokok)}</span>
-                        <span style={localStyles.summaryUnit}>IDRT</span>
+                        <span style={localStyles.summaryUnit}></span>
                     </div>
                     <div style={localStyles.summaryItem}>
                         <span style={localStyles.summaryLabel}>Bunga Simpanan</span>
@@ -260,6 +272,23 @@ const AdminSettings = ({ config, onUpdate, isLoading }) => {
                         <span style={localStyles.summaryLabel}>Denda Harian</span>
                         <span style={localStyles.summaryValue}>{config?.denda}‰</span>
                         <span style={localStyles.summaryUnit}>Per Hari</span>
+                    </div>
+                    <div style={localStyles.summaryItem}>
+                        <span style={localStyles.summaryLabel}>Simpanan Wajib</span>
+                        <span style={localStyles.summaryValue}>Rp {formatIDR(config?.wajib)}</span>
+                        <span style={localStyles.summaryUnit}>/ Periode</span>
+                    </div>
+                    <div style={localStyles.summaryItem}>
+                        <span style={localStyles.summaryLabel}>Upfront Deduct</span>
+                        <span style={{ ...localStyles.summaryValue, color: config?.deductUpfront ? '#22c55e' : '#64748b' }}>
+                            {config?.deductUpfront ? 'ON' : 'OFF'}
+                        </span>
+                        <span style={localStyles.summaryUnit}>Fee Strategy</span>
+                    </div>
+                    <div style={localStyles.summaryItem}>
+                        <span style={localStyles.summaryLabel}>Admin + Provisi</span>
+                        <span style={localStyles.summaryValue}>Rp {formatIDR(config?.feeAdmin)} + {config?.feeProvisi}%</span>
+                        <span style={localStyles.summaryUnit}>Per Pinjaman</span>
                     </div>
                 </div>
             </div>
@@ -282,6 +311,17 @@ const AdminSettings = ({ config, onUpdate, isLoading }) => {
                                     value={formData.pokok}
                                     placeholder="e.g. 100000"
                                     onChange={e => setFormData({ ...formData, pokok: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <label style={localStyles.label}>Simpanan Wajib (Bulanan)</label>
+                                <span style={localStyles.activeHint}>Aktif: Rp {formatIDR(config?.wajib)}</span>
+                                <input
+                                    type="number"
+                                    style={localStyles.input}
+                                    value={formData.wajib}
+                                    placeholder="e.g. 25000"
+                                    onChange={e => setFormData({ ...formData, wajib: e.target.value })}
                                 />
                             </div>
                         </div>
@@ -339,11 +379,133 @@ const AdminSettings = ({ config, onUpdate, isLoading }) => {
                                     onChange={e => setFormData({ ...formData, dendaHarian: e.target.value })}
                                 />
                             </div>
+                            <div>
+                                <label style={localStyles.label}>Provisi (%)</label>
+                                <span style={localStyles.activeHint}>Aktif: {config?.feeProvisi}%</span>
+                                <input
+                                    type="number"
+                                    style={localStyles.input}
+                                    value={formData.feeProvisi}
+                                    onChange={e => setFormData({ ...formData, feeProvisi: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <label style={localStyles.label}>Biaya Admin (Flat)</label>
+                                <span style={localStyles.activeHint}>Aktif: Rp {formatIDR(config?.feeAdmin)}</span>
+                                <input
+                                    type="number"
+                                    style={localStyles.input}
+                                    value={formData.feeAdmin}
+                                    onChange={e => setFormData({ ...formData, feeAdmin: e.target.value })}
+                                />
+                            </div>
                         </div>
+
+                        <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '12px', background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                            <input 
+                                type="checkbox" 
+                                id="deductUpfront"
+                                checked={formData.deductUpfront}
+                                onChange={e => setFormData({ ...formData, deductUpfront: e.target.checked })}
+                                style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                            />
+                            <label htmlFor="deductUpfront" style={{ fontSize: '0.85rem', fontWeight: '600', color: '#334155', cursor: 'pointer' }}>
+                                Potong biaya (Provisi/Resiko/Admin) langsung dari pencairan dana
+                            </label>
+                        </div>
+
                         <p style={localStyles.helper}>
-                            Ketentuan bunga pinjaman dan denda keterlambatan per mil.
+                            Jika dicentang, dana yang diterima anggota akan dikurangi biaya di muka. Jika tidak, biaya akan ditambahkan ke total hutang.
                         </p>
                     </div>
+                </div>
+            </div>
+
+            {/* [NEW] Webhook & Callback Settings Section */}
+            <div style={{ ...localStyles.summarySection, background: '#fff', border: '1px solid #e2e8f0', boxShadow: 'none', marginBottom: '24px' }}>
+                <div style={localStyles.summaryHeader}>
+                    <div style={{ color: '#3b82f6' }}><ShieldCheckIcon /></div>
+                    <h3 style={localStyles.summaryTitle}>Webhook & Callback Settings</h3>
+                </div>
+
+                <div style={{ 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    gap: '16px',
+                    padding: '24px',
+                    borderRadius: '16px',
+                    background: systemStatus?.webhookMismatch ? '#fef2f2' : '#f8fafc',
+                    border: `1px solid ${systemStatus?.webhookMismatch ? '#fecaca' : '#e2e8f0'}`
+                }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div>
+                            <div style={{ fontSize: '0.9rem', fontWeight: '800', color: '#1e293b' }}>Status Sinkronisasi Otomatis</div>
+                            <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '4px' }}>
+                                Server memperbarui URL Callback di Xendit secara otomatis via API.
+                            </div>
+                        </div>
+                        <span style={{ 
+                            padding: '6px 14px', 
+                            borderRadius: '99px', 
+                            fontSize: '0.75rem', 
+                            fontWeight: '800',
+                            background: systemStatus?.tunnel === 'OFFLINE' ? '#94a3b8' : (systemStatus?.webhookMismatch ? '#ef4444' : '#22c55e'),
+                            color: '#fff',
+                            textTransform: 'uppercase'
+                        }}>
+                            {systemStatus?.tunnel === 'OFFLINE' ? 'OFFLINE' : (systemStatus?.webhookMismatch ? 'Sinkronisasi Diperlukan' : 'Tersinkronisasi')}
+                        </span>
+                    </div>
+
+                    <div style={{ background: '#fff', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                        <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase', marginBottom: '8px' }}>URL NGrok Anda Saat Ini</div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
+                            <code style={{ fontSize: '0.95rem', color: '#0f172a', fontWeight: '800', fontFamily: 'monospace', letterSpacing: '-0.01em' }}>
+                                {systemStatus?.currentUrl || 'NGrok Offline'}
+                            </code>
+                            <button 
+                                onClick={() => {
+                                    navigator.clipboard.writeText(systemStatus?.currentUrl);
+                                    alert("Berhasil disalin!");
+                                }}
+                                style={{ background: '#f1f5f9', border: 'none', padding: '8px 16px', borderRadius: '8px', fontSize: '0.85rem', fontWeight: '700', cursor: 'pointer', transition: 'all 0.2s' }}
+                            >
+                                Salin URL
+                            </button>
+                        </div>
+                    </div>
+
+                    {systemStatus?.tunnel === 'ONLINE' && systemStatus?.webhookMismatch && (
+                        <div style={{ padding: '20px', background: '#fff', borderRadius: '12px', border: '2px dashed #ef4444' }}>
+                            <div style={{ display: 'flex', gap: '12px', marginBottom: '8px' }}>
+                                <span style={{ fontSize: '1.2rem' }}>⏳</span>
+                                <p style={{ fontSize: '0.9rem', color: '#991b1b', margin: 0, fontWeight: '600', lineHeight: 1.5 }}>
+                                    Sedang menyinkronkan URL baru ke Xendit... (Proses Otomatis)
+                                </p>
+                            </div>
+                            <p style={{ fontSize: '0.8rem', color: '#64748b', margin: 0 }}>
+                                Terdeteksi perubahan URL NGrok. Server sedang mencoba memperbarui setting Callback di Dashboard Xendit via API. Harap tunggu 5-10 detik.
+                            </p>
+                        </div>
+                    )}
+
+                    {systemStatus?.tunnel === 'ONLINE' && !systemStatus?.webhookMismatch && (
+                        <div style={{ padding: '16px', background: '#f0fdf4', borderRadius: '12px', border: '1px solid #bbf7d0', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{ color: '#22c55e' }}><ShieldCheckIcon /></div>
+                            <span style={{ fontSize: '0.85rem', color: '#166534', fontWeight: '600' }}>
+                                Terhubung! Dashboard Xendit telah sinkron dengan URL NGrok Anda.
+                            </span>
+                        </div>
+                    )}
+
+                    {systemStatus?.tunnel === 'OFFLINE' && (
+                        <div style={{ padding: '16px', background: '#fefce8', borderRadius: '12px', border: '1px solid #fef08a', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{ color: '#eab308' }}><InfoIcon /></div>
+                            <span style={{ fontSize: '0.85rem', color: '#854d0e', fontWeight: '600' }}>
+                                NGrok Offline: Menunggu tunnel aktif untuk memulai sinkronisasi.
+                            </span>
+                        </div>
+                    )}
                 </div>
             </div>
 

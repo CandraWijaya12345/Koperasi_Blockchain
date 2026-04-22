@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { cardStyles as styles } from '../../styles/cards';
 import InlineMessage from '../InlineMessage';
-import { formatCurrency, formatToken } from '../../utils/format';
+import { formatCurrency, formatToken, formatTokenInt } from '../../utils/format';
 
 const LockIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>;
 const UnlockIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 9.9-1" /></svg>;
@@ -87,7 +87,7 @@ const SimpananBerjangkaForm = ({
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '20px' }}>
           <div>
-            <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.85rem', fontWeight: '600', color: '#475569' }}>Nominal Investasi (IDRT)</label>
+            <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.85rem', fontWeight: '600', color: '#475569' }}>Nominal Investasi (Rupiah)</label>
             <div style={{ position: 'relative' }}>
               <input
                 type="number"
@@ -97,7 +97,7 @@ const SimpananBerjangkaForm = ({
                 style={{ ...styles.input, marginBottom: 0, paddingRight: '60px' }}
               />
               <button 
-                onClick={() => setAmount(formatToken(anggotaData?.simpananSukarela || 0n))}
+                onClick={() => setAmount(formatTokenInt(anggotaData?.simpananSukarela || 0n))}
                 style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', padding: '4px 10px', fontSize: '0.7rem', fontWeight: '700', cursor: 'pointer' }}
               >
                 MAX
@@ -140,12 +140,12 @@ const SimpananBerjangkaForm = ({
         <div style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '12px', marginBottom: '24px', display: 'flex', gap: '16px', border: '1px solid #e2e8f0' }}>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>Imbal Jasa Estimasi ({annualInterestRate}% p.a)</div>
-            <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#16a34a' }}>+ {formatCurrency(estimateInterest.toFixed(0))} <span style={{ fontSize: '0.7rem', color: '#64748b' }}>IDRT</span></div>
+            <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#16a34a' }}>+ {formatCurrency(estimateInterest.toFixed(0))}</div>
           </div>
           <div style={{ width: '1.5px', backgroundColor: '#e2e8f0' }}></div>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>Total Penerimaan Saat Jatuh Tempo</div>
-            <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#1e293b' }}>{formatCurrency((Number(amount || 0) + estimateInterest).toFixed(0))} <span style={{ fontSize: '0.7rem', color: '#64748b' }}>IDRT</span></div>
+            <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#1e293b' }}>{formatCurrency((Number(amount || 0) + estimateInterest).toFixed(0))}</div>
           </div>
         </div>
 
@@ -185,7 +185,7 @@ const SimpananBerjangkaForm = ({
                     </div>
                     <div>
                       <div style={{ fontSize: '0.95rem', fontWeight: '700', color: '#111827' }}>
-                        {formatCurrency(formatToken(dep.amount))} IDRT
+                        {formatCurrency(formatToken(dep.amount))}
                       </div>
                       <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
                         {isMatured ? 'Siap Dicairkan' : `Jatuh tempo dlm ${daysLeft} hari`}

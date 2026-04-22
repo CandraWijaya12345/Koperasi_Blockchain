@@ -2,7 +2,7 @@ import React from 'react';
 import PendingLoanItem from './PendingLoanItem';
 import InlineMessage from '../InlineMessage';
 
-const AdminPanel = ({ pendingLoans, onApprove, onReject, onApproveSurvey, onApproveCommittee, isLoading }) => {
+const AdminPanel = ({ pendingLoans, onApprove, onReject, onApproveSurvey, onApproveCommittee, isLoading, adminConfig }) => {
   const [msg, setMsg] = React.useState('');
   const [isError, setIsError] = React.useState(false);
 
@@ -45,6 +45,7 @@ const AdminPanel = ({ pendingLoans, onApprove, onReject, onApproveSurvey, onAppr
               onApproveCommittee={onApproveCommittee}
               loading={isLoading}
               onNotify={handleNotify}
+              adminConfig={adminConfig}
             />
           ))
         )}

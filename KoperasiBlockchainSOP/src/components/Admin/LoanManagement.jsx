@@ -3,7 +3,7 @@ import PendingLoanItem from './PendingLoanItem';
 import InlineMessage from '../InlineMessage'; // Import InlineMessage
 import { formatCurrency, formatToken } from '../../utils/format';
 
-const LoanManagement = ({ allLoans, onApprove, onReject, onApproveSurvey, onApproveCommittee, isLoading }) => {
+const LoanManagement = ({ allLoans, onApprove, onReject, onApproveSurvey, onApproveCommittee, isLoading, systemStatus, adminConfig }) => {
     const [activeTab, setActiveTab] = useState('pending'); // pending, active, paid, rejected
     const [msg, setMsg] = useState('');
     const [isError, setIsError] = useState(false);
@@ -157,6 +157,8 @@ const LoanManagement = ({ allLoans, onApprove, onReject, onApproveSurvey, onAppr
                                         onApproveCommittee={onApproveCommittee}
                                         loading={isLoading}
                                         onNotify={handleNotify}
+                                        systemStatus={systemStatus}
+                                        adminConfig={adminConfig}
                                     />
                                 ))}
                             </div>

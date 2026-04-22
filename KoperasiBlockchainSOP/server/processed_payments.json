@@ -166,5 +166,68 @@
     "description": "Angsuran Pinjaman #2 - 0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
     "status": "COMPLETED",
     "lastUpdate": "2026-04-21T16:31:39.024Z"
+  },
+  "TRX-1776820405673-639": {
+    "userAddress": "0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "amount": 10000,
+    "description": "Simpanan Koperasi (Sukarela) - 0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-04-22T01:13:36.106Z"
+  },
+  "TRX-1776819475413-618": {
+    "userAddress": "0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "amount": 10000,
+    "description": "Simpanan Koperasi (Sukarela) - 0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-04-22T01:13:52.688Z"
+  },
+  "TRX-1776820435510-212": {
+    "userAddress": "0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "amount": 25000,
+    "description": "Simpanan Koperasi (Wajib) - 0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-04-22T01:14:04.740Z"
+  },
+  "TRX-1776819608951-133": {
+    "userAddress": "0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "amount": 10000,
+    "description": "Simpanan Koperasi (Sukarela) - 0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-04-22T01:15:57.964Z"
+  },
+  "TRX-1776828855239-457": {
+    "userAddress": "0xa73d8f213dbbf6367b19221b9883ed479d181dfe",
+    "amount": 100000,
+    "description": "Simpanan Koperasi (Pokok) - 0xa73d8f213dbbf6367b19221b9883ed479d181dfe",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-04-22T03:34:38.928Z"
+  },
+  "TRX-1776830769943-697": {
+    "userAddress": "0xa73d8f213dbbf6367b19221b9883ed479d181dfe",
+    "amount": 100000,
+    "description": "Simpanan Koperasi (Pokok) - 0xa73d8f213dbbf6367b19221b9883ed479d181dfe",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-04-22T04:06:31.428Z"
+  },
+  "REPAY-3-1776837368825-5": {
+    "userAddress": "0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "amount": 11200,
+    "description": "Angsuran Pinjaman #3 - 0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-04-22T05:56:18.281Z"
+  },
+  "REPAY-4-1776838695657-881": {
+    "userAddress": "0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "amount": 12360,
+    "description": "Angsuran Pinjaman #4 - 0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-04-22T06:18:24.566Z"
+  },
+  "REPAY-5-1776838865576-585": {
+    "userAddress": "0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "amount": 12360,
+    "description": "Angsuran Pinjaman #5 - 0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-04-22T06:21:19.314Z"
   }
 }

@@ -41,13 +41,24 @@ const AjukanPinjamanForm = ({ onAjukan, isLoading, maxLimit, adminConfig }) => {
     }
   };
 
-  // Calculation Logic: (Amount * Rate/100 * Tenor) / 12
   const amountVal = parseFloat(amount) || 0;
   const tenorVal = parseInt(tenor) || 12;
 
+  // Fee Calculations based on adminConfig
+  const feeProvisiRate = adminConfig?.feeProvisi || 0;
+  const feeAdminFlat = adminConfig?.feeAdmin || 0;
+  const deductUpfront = !!adminConfig?.deductUpfront;
+
+  const totalProvisi = (amountVal * feeProvisiRate) / 100;
+  const totalBiayaLain = totalProvisi + feeAdminFlat;
+  
   const totalBunga = (amountVal * (bungaRate / 100) * tenorVal) / 12;
-  const totalBayar = amountVal + totalBunga;
-  const cicilanPerBulan = totalBayar / tenorVal;
+  
+  // Logic: If deductUpfront, amount is original, but receipt is less.
+  // If not deductUpfront, amount is original, but total debt is more.
+  const amountToReceive = deductUpfront ? (amountVal - totalBiayaLain) : amountVal;
+  const totalDebt = deductUpfront ? (amountVal + totalBunga) : (amountVal + totalBunga + totalBiayaLain);
+  const cicilanPerBulan = totalDebt / tenorVal;
 
   // Formatting for display
   const formatRp = (val) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val);
@@ -137,13 +148,25 @@ const AjukanPinjamanForm = ({ onAjukan, isLoading, maxLimit, adminConfig }) => {
                 <b>{formatRp(amountVal)}</b>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#64748b' }}>Biaya Admin:</span>
+                <b style={{ color: '#ef4444' }}>- {formatRp(feeAdminFlat)}</b>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#64748b' }}>Biaya Provisi ({feeProvisiRate}%):</span>
+                <b style={{ color: '#ef4444' }}>- {formatRp(totalProvisi)}</b>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px', padding: '8px 0', borderTop: '1px dashed #cbd5e1' }}>
+                <span style={{ fontWeight: 600, color: '#1e3a8a' }}>{deductUpfront ? 'Estimasi Dana Diterima:' : 'Dana Diterima:'}</span>
+                <b style={{ color: '#166534', fontSize: '1rem' }}>{formatRp(amountToReceive)}</b>
+              </div>
+              <div style={{ height: '1px', background: '#cbd5e1', margin: '4px 0' }}></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: '#64748b' }}>Total Bunga ({tenorVal} bln):</span>
                 <b style={{ color: '#ea580c' }}>+ {formatRp(totalBunga)}</b>
               </div>
-              <div style={{ height: '1px', background: '#cbd5e1', margin: '4px 0' }}></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1rem', marginTop: '8px' }}>
                 <span style={{ fontWeight: 600, color: '#1e40af' }}>Total Harus Dibayar:</span>
-                <b style={{ color: '#1e40af' }}>{formatRp(totalBayar)}</b>
+                <b style={{ color: '#1e40af' }}>{formatRp(totalDebt)}</b>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', backgroundColor: '#dbeafe', padding: '8px', borderRadius: '6px', marginTop: '4px' }}>
                 <span style={{ fontWeight: 600, color: '#1e3a8a' }}>Cicilan / Bulan:</span>

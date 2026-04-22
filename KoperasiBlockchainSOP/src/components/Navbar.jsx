@@ -37,11 +37,7 @@ const Navbar = ({ account, onConnect, onDisconnect, isLoading, onNavigate, activ
                     } else {
                         // If we are not on home, go home first
                         if (window.location.pathname !== '/' && window.location.pathname !== '/user') {
-                            navigate('/');
-                            // Small delay or use useEffect in target page to set tab
-                            setTimeout(() => {
-                                if (onNavigate) onNavigate(id);
-                            }, 50);
+                            navigate('/', { state: { targetTab: id } });
                         } else {
                             if (onNavigate) onNavigate(id);
                         }

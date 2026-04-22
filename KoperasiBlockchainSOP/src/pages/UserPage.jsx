@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Hero from '../components/Hero';
 import InfoCards from '../components/InfoCards';
@@ -34,6 +35,16 @@ const UserPage = () => {
   const [showBreakdown, setShowBreakdown] = useState(false);
 
   const { account, isConnecting, connectWallet, disconnectWallet, error: walletError } = useWallet();
+  const location = useLocation();
+
+  // [UX FIX] Handle navigation state from other pages (e.g. from Profile)
+  useEffect(() => {
+    if (location.state?.targetTab) {
+      setActiveTab(location.state.targetTab);
+      // Clear state so it doesn't persist on manual refresh
+      window.history.replaceState({}, document.title);
+    }
+  }, [location]);
 
   const {
     message,
@@ -62,7 +73,9 @@ const UserPage = () => {
     triggerTripleSync,
     setPaymentSuccess,
     isPengurus,
-    paymentType
+    paymentType,
+    joiningDate,
+    systemStatus
   } = useKoperasi(account);
 
   // [BARU] States for Iframe Payment Modal
@@ -214,6 +227,30 @@ const UserPage = () => {
       fontSize: '0.875rem',
       color: '#1e3a8a',
       fontWeight: '700',
+    },
+    statusBadge: (status) => ({
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: '8px',
+      padding: '6px 16px',
+      borderRadius: '99px',
+      fontSize: '0.825rem',
+      fontWeight: '800',
+      background: status === 1 ? '#dcfce7' : (status === 3 ? '#fef3c7' : '#f1f5f9'),
+      color: status === 1 ? '#166534' : (status === 3 ? '#92400e' : '#64748b'),
+      border: `1px solid ${status === 1 ? '#bbf7d0' : (status === 3 ? '#fde68a' : '#e2e8f0')}`,
+    }),
+    watchdogBanner: {
+      backgroundColor: '#fef2f2',
+      borderBottom: '1px solid #fee2e2',
+      padding: '12px 24px',
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      gap: '12px',
+      color: '#991b1b',
+      fontSize: '0.875rem',
+      fontWeight: '600'
     }
   };
 
@@ -227,6 +264,15 @@ const UserPage = () => {
         activeTab={activeTab}
         onNavigate={setActiveTab}
       />
+
+      {/* WATCHDOG SYSTEM HEALTH BANNER */}
+      {systemStatus.webhookMismatch && (
+        <div style={styles.watchdogBanner}>
+            <span style={{ animation: 'pulse 1s infinite' }}>⚠️</span>
+            <span>Deteksi Masalah Sinkronisasi: Callback Xendit mungkin terganggu. Kami sedang mencoba menyelaraskan otomatis...</span>
+            <button onClick={refresh} style={{ background: '#ef4444', color: 'white', border: 'none', padding: '4px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.75rem' }}>Periksa Sekarang</button>
+        </div>
+      )}
 
       {/* GLOBAL LOADING / SYNCING OVERLAY */}
       <VerificationOverlay 
@@ -294,9 +340,15 @@ const UserPage = () => {
                       <span style={styles.breakdownLabel}>Simpanan Wajib</span>
                       <span style={styles.breakdownValue}>{formatCurrency(formatToken(anggotaData?.simpananWajib || 0))}</span>
                     </div>
-                    <div style={{ ...styles.breakdownItem, borderBottom: 'none' }}>
+                    <div style={styles.breakdownItem}>
                       <span style={styles.breakdownLabel}>Simpanan Sukarela</span>
                       <span style={styles.breakdownValue}>{formatCurrency(formatToken(anggotaData?.simpananSukarela || 0))}</span>
+                    </div>
+                    <div style={{ ...styles.breakdownItem, borderBottom: 'none' }}>
+                      <span style={styles.breakdownLabel}>Simpanan Berjangka</span>
+                      <span style={{ ...styles.breakdownValue, color: '#16a34a' }}>
+                        {formatCurrency(formatToken(userTimeDeposits.reduce((sum, d) => d.active ? sum + BigInt(d.amount) : sum, 0n)))}
+                      </span>
                     </div>
                   </div>
 
@@ -443,6 +495,7 @@ const UserPage = () => {
                   <>
                     <SimpananWajibForm
                       anggotaData={anggotaData}
+                      adminConfig={adminConfig}
                       isLoading={isLoading}
                       isPaymentLocked={isPaymentLocked}
                       paymentSuccess={paymentSuccess}

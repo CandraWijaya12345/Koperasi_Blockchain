@@ -111,10 +111,6 @@ const MemberDetailModal = ({ member, onClose, allLogs, onCloseMembership }) => {
               <div style={modalStyles.statLabel}>Simpanan Sukarela</div>
               <div style={modalStyles.statValue}>{formatCurrency(formatToken(member.simpananSukarela || 0n))}</div>
             </div>
-            <div style={{ ...modalStyles.statCard, border: '1px solid #dbeafe', backgroundColor: '#eff6ff' }}>
-              <div style={{ ...modalStyles.statLabel, color: '#2563eb' }}>SHU Diambil</div>
-              <div style={{ ...modalStyles.statValue, color: '#1e40af' }}>{formatCurrency(formatToken(member.shuSudahDiambil || 0n))}</div>
-            </div>
           </div>
 
           <div style={{ marginTop: '28px' }}>

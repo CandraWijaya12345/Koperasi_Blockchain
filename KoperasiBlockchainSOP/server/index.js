@@ -56,12 +56,21 @@ const CONTRACT_ABI = JSON.parse(fs.readFileSync(ABI_PATH, 'utf8'));
 
 // Data Storage
 const LOANS_DB_PATH = path.join(__dirname, 'data/loans.json');
+const WEBHOOK_CONFIG_FILE = path.join(__dirname, 'data/webhook_config.json');
+
 // Ensure directory exists
 if (!fs.existsSync(path.dirname(LOANS_DB_PATH))) {
     fs.mkdirSync(path.dirname(LOANS_DB_PATH), { recursive: true });
 }
 if (!fs.existsSync(LOANS_DB_PATH)) {
     fs.writeFileSync(LOANS_DB_PATH, JSON.stringify({}));
+}
+
+// Webhook Configuration Utility
+function getWebhookConfig() {
+    return {
+        // Source of truth is now the Xendit Dashboard via API
+    };
 }
 
 // Helper to access loans DB
@@ -171,16 +180,142 @@ const xenditClient = new Xendit({
 
 const { Invoice, Payout, Balance } = xenditClient;
 
+// --- PRE-FLIGHT VALIDATION: Xendit & Tunnel Connectivity ---
+
+async function checkNgrokHealth() {
+    try {
+        // NGrok local inspection API
+        const res = await fetch('http://127.0.0.1:4040/api/tunnels');
+        const data = await res.json();
+        return data.tunnels && data.tunnels.length > 0;
+    } catch (e) {
+        return false; 
+    }
+}
+
+async function getPublicTunnelUrl() {
+    try {
+        const res = await fetch('http://127.0.0.1:4040/api/tunnels');
+        const data = await res.json();
+        if (data.tunnels && data.tunnels.length > 0) {
+            // Find the https one if possible
+            const httpsTunnel = data.tunnels.find(t => t.public_url.startsWith('https'));
+            return httpsTunnel ? httpsTunnel.public_url : data.tunnels[0].public_url;
+        }
+    } catch (e) {}
+    return null;
+}
+
+// [NEW] Ultimate Webhook Automation (Proactive Push)
+let lastSyncedUrl = ""; 
+
+async function syncXenditWebhooks(publicUrl) {
+    if (!publicUrl || publicUrl === lastSyncedUrl) return true;
+    
+    try {
+        const auth = Buffer.from(`${process.env.XENDIT_SECRET_KEY}:`).toString('base64');
+        const features = [
+            { id: 'invoice', path: '/api/xendit-callback' },
+            { id: 'disbursement', path: '/api/xendit-disbursement-callback' }
+        ];
+
+        console.log(`[Webhook Sync] New URL detected: ${publicUrl}. Syncing with Xendit...`);
+
+        for (const feature of features) {
+            const targetUrl = `${publicUrl}${feature.path}`;
+            console.log(`[Webhook Sync] Target for ${feature.id}: ${targetUrl}`);
+            const res = await fetch(`https://api.xendit.co/callback_urls/${feature.id}`, {
+                method: 'POST',
+                headers: { 
+                    'Authorization': `Basic ${auth}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ url: targetUrl })
+            });
+            
+            // [SAFE FETCH] Handle potential non-JSON or error responses
+            const text = await res.text();
+            let data = {};
+            try { data = JSON.parse(text); } catch (e) { data = { error: text }; }
+
+            if (res.status !== 200) {
+                console.error(`[Webhook Sync] Failed for ${feature.id}:`, data.message || data.error_code || text);
+                return false;
+            }
+        }
+
+        lastSyncedUrl = publicUrl;
+        console.log(`[Webhook Sync] SUCCESS: Dashboard Xendit has been automatically updated.`);
+        return true;
+    } catch (e) {
+        console.error("[Webhook Sync] Critical Error:", e.message);
+        return false;
+    }
+}
+
+// Health Check Logic
+async function checkXenditHealth() {
+    const status = { xendit: 'OFFLINE', tunnel: 'OFFLINE', webhookMismatch: false, currentUrl: "" };
+    
+    // 1. Check NGrok Tunnel
+    const ngrokActive = await checkNgrokHealth();
+    if (ngrokActive) {
+        status.tunnel = 'ONLINE';
+        status.currentUrl = await getPublicTunnelUrl();
+    }
+
+    // 2. Check Xendit API Outbound
+    try {
+        const balance = await Balance.getBalance({ accountType: 'CASH' });
+        if (balance) status.xendit = 'ONLINE';
+    } catch (e) {
+        console.error("Xendit API Offline:", e.message);
+    }
+
+    // 3. [ULTIMATE] Proactive Sync
+    if (status.tunnel === 'ONLINE' && status.xendit === 'ONLINE') {
+        const isSynced = await syncXenditWebhooks(status.currentUrl);
+        status.webhookMismatch = !isSynced;
+    }
+
+    return status;
+}
+
 // --- ROUTES ---
+
+// 0. Health Monitor Endpoint
+app.get('/api/health', async (req, res) => {
+    try {
+        const status = await checkXenditHealth();
+        // Add blockchain health logic here if needed
+        let walletBalance = '0';
+        try {
+            const balWei = await provider.getBalance(wallet.address);
+            walletBalance = ethers.formatEther(balWei);
+        } catch (e) {}
+        
+        res.json({
+            ...status,
+            blockchain: 'ONLINE',
+            adminWallet: wallet.address,
+            adminBalance: walletBalance,
+            timestamp: new Date().toISOString()
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
 
 // 1. Payment: Create Invoice (Simpanan)
 app.post('/api/payment/create', async (req, res) => {
     const { userAddress, amount, isWajib } = req.body;
     if (!userAddress || !amount) return res.status(400).json({ error: "Data tidak lengkap" });
 
-    const externalId = `TRX-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-
     try {
+        // [PRE-FLIGHT] Check Xendit Connectivity
+        await checkXenditHealth();
+
+        const externalId = `TRX-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
         const typeLabel = isWajib === 'POKOK' ? 'Pokok' : (isWajib ? 'Wajib' : 'Sukarela');
 
         const response = await Invoice.createInvoice({
@@ -224,9 +359,11 @@ app.post('/api/payment/repay', async (req, res) => {
         return res.status(400).json({ error: "Data tidak lengkap (userAddress, loanId, amount)" });
     }
 
-    const externalId = `REPAY-${loanId}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-
     try {
+        // [PRE-FLIGHT] Check Xendit Connectivity
+        await checkXenditHealth();
+
+        const externalId = `REPAY-${loanId}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
         const response = await Invoice.createInvoice({
             data: {
                 externalId: externalId,
@@ -488,6 +625,10 @@ app.post('/api/loan/approve-disburse', async (req, res) => {
     if (!loanId || !userAddress) return res.status(400).json({ error: "Missing loanId or userAddress" });
 
     try {
+        // [CRITICAL PRE-FLIGHT] Check Xendit Connectivity BEFORE Blockchain Approval
+        // This prevents "Burned IDRT but failed Fiat Payout" scenarios
+        await checkXenditHealth();
+
         console.log(`Approving Loan #${loanId} for ${userAddress}...`);
 
         // PRE-CHECK: Check POL Balance for Gas
@@ -507,20 +648,36 @@ app.post('/api/loan/approve-disburse', async (req, res) => {
         }
 
         // 2. Approve on Blockchain (Execute setujuiPinjaman via Admin Wallet)
-        // Check if already approved? Contract will revert if so.
-        // We assume frontend calls this INSTEAD of calling contract directly.
-
-        // Note: contract.setujuiPinjaman(id) requires Admin
-        // Wait! server wallet IS Admin.
-
         const tx = await contract.setujuiPinjaman(loanId, GAS_OVERRIDE);
         console.log("Blockchain Approval Tx:", tx.hash);
         await tx.wait();
         console.log("Blockchain Approval Confirmed.");
 
-        // 3. Trigger Xendit Payout
+        // 3. [NEW] Fetch Smart Contract Settings to calculate actual Disburse Amount
+        const settings = await contract.settings();
+        const deductUpfront = settings[2];
+        const feeAdminWei = settings[7];
+        const feeProvisiRate = Number(settings[8]);
+        const feeResikoRate = Number(settings[9]);
+
+        let finalAmount = Number(details.loanAmount);
+        let feeBreakdownStr = "No deductions (Deduct at End enabled)";
+
+        if (deductUpfront) {
+            const adminFee = Number(ethers.formatUnits(feeAdminWei, 18));
+            const provisiFee = (finalAmount * feeProvisiRate) / 100;
+            const resikoFee = (finalAmount * feeResikoRate) / 100;
+            const totalFees = adminFee + provisiFee + resikoFee;
+            
+            finalAmount = finalAmount - totalFees;
+            feeBreakdownStr = `Deducted Upfront: Admin(${adminFee}), Provisi(${provisiFee}), Resiko(${resikoFee})`;
+        }
+
+        // 4. Trigger Xendit Payout
         const channelCode = `ID_${details.bank.toUpperCase()}`;
-        console.log(`[Xendit Payout] Triggering: ${channelCode} to ${details.accountNumber} (Amount: ${details.loanAmount})`);
+        console.log(`[Xendit Payout] Triggering: ${channelCode} to ${details.accountNumber}`);
+        console.log(`[Xendit Payout] Principal: ${details.loanAmount}, Final Payout: ${finalAmount}`);
+        console.log(`[Xendit Payout] Policy: ${feeBreakdownStr}`);
 
         const externalId = `DISB-${loanId}-${Date.now()}`;
         const payoutResult = await Payout.createPayout({
@@ -532,7 +689,7 @@ app.post('/api/loan/approve-disburse', async (req, res) => {
                     accountHolderName: details.accountHolderName || 'Anggota Koperasi', 
                     accountNumber: details.accountNumber,
                 },
-                amount: Number(details.loanAmount),
+                amount: Math.floor(finalAmount), // Ensure integer for Xendit
                 currency: 'IDR',
                 description: `Pencairan Pinjaman #${loanId}`,
                 type: 'DIRECT_DISBURSEMENT'
@@ -877,8 +1034,9 @@ async function runAutoSync() {
         console.log("[AutoSync] Checking Liquidity...");
 
         // 1. Get Xendit Balance and convert to WEI (18 decimals)
-        const xRes = await Balance.getBalance({ accountType: 'CASH' });
-        const xBalanceFiat = Math.floor(xRes.balance); 
+        const xResRaw = await Balance.getBalance({ accountType: 'CASH' });
+        // Ensure we handle different possible response formats from xendit-node
+        const xBalanceFiat = Math.floor(xResRaw.balance || xResRaw[0]?.balance || 0); 
         const xBalanceWei = ethers.parseUnits(xBalanceFiat.toString(), 18);
 
         // 2. Get Contract Balance (This is already in WEI)
@@ -982,6 +1140,9 @@ app.listen(PORT, async () => {
     console.log(" STATUS: AUTOMATED SYNC V2 ENABLED");
     console.log("------------------------------------------------\n");
 
-    // Start Recovery Process
+    // Start Recovery & Sync Process
     await recoverIncompletePayments();
+    
+    console.log("[Startup] Checking Xendit & Tunnel Health...");
+    await checkXenditHealth();
 });

@@ -142,6 +142,32 @@ export const useKoperasi = (account) => {
   const [paymentType, setPaymentType] = useState(() => sessionStorage.getItem('paymentType') || 'simpanan');
   const [paymentBaseline, setPaymentBaseline] = useState(() => BigInt(sessionStorage.getItem('paymentBaseline') || '0'));
 
+  // [BARU] Status Kesehatan Backend (Xendit, Tunnel & Blockchain)
+  const [systemStatus, setSystemStatus] = useState({ 
+    xendit: 'UNKNOWN', 
+    tunnel: 'UNKNOWN', 
+    blockchain: 'UNKNOWN', 
+    adminBalance: '0',
+    webhookMismatch: false,
+    currentUrl: ''
+  });
+
+  // [BARU] Watchdog NGrok: Deteksi perubahan Tunnel URL secara dinamis
+  const lastTunnelUrl = useRef('');
+  useEffect(() => {
+    if (systemStatus.currentUrl && lastTunnelUrl.current && systemStatus.currentUrl !== lastTunnelUrl.current) {
+        console.warn("[Watchdog] NGrok URL Changed! Syncing environment...");
+        // Auto-refresh to ensure all components and relative links are updated
+        setTimeout(() => {
+            window.location.reload();
+        }, 1500);
+    }
+    if (systemStatus.currentUrl) {
+        lastTunnelUrl.current = systemStatus.currentUrl;
+    }
+  }, [systemStatus.currentUrl]);
+
+
   useEffect(() => {
     sessionStorage.setItem('isPaymentLocked', isPaymentLocked);
     sessionStorage.setItem('paymentType', paymentType);
@@ -158,11 +184,22 @@ export const useKoperasi = (account) => {
   const [pendingLoanUser, setPendingLoanUser] = useState(null);
   const [pendingLoans, setPendingLoans] = useState([]);
   const [approvedTodayCount, setApprovedTodayCount] = useState(0);
+  const [joiningDate, setJoiningDate] = useState(null);
   const [userTimeDeposits, setUserTimeDeposits] = useState([]);
 
   // Admin Data
   const [allLoans, setAllLoans] = useState({ pending: [], active: [], paid: [], rejected: [] });
-  const [adminConfig, setAdminConfig] = useState({ bunga: 0, bungaPinjaman: 0, denda: 0, pokok: 0, adm: 0 });
+  const [adminConfig, setAdminConfig] = React.useState({
+    bunga: 9, 
+    bungaPinjaman: 12, 
+    denda: 1,
+    pokok: 0,
+    wajib: 0,
+    feeAdmin: 0,
+    feeProvisi: 0,
+    feeResiko: 0,
+    deductUpfront: false
+  });
 
   // --- helper untuk approval token ---
   const handleApprove = async (amount, onProgress) => {
@@ -196,7 +233,7 @@ export const useKoperasi = (account) => {
     if (!idrTokenContract || !account) throw new Error("Wallet belum terhubung");
     const bal = await idrTokenContract.balanceOf(account);
     if (bal < requiredAmount) {
-      throw new Error(`Saldo IDRT Kurang! Butuh ${formatToken(requiredAmount)} IDRT, Saldo Anda: ${formatToken(bal)} `);
+      throw new Error(`Saldo Rupiah Kurang! Butuh ${formatCurrency(formatToken(requiredAmount))}, Saldo Anda: ${formatCurrency(formatToken(bal))} `);
     }
   };
 
@@ -224,6 +261,7 @@ export const useKoperasi = (account) => {
       const allBerjangkaCair = [];
       const allSHU = [];
       const allMemberUpdates = [];
+      const allBaru = [];
 
       for (const l of allLogsRaw) {
         if (!l.fragment?.name) continue;
@@ -240,6 +278,7 @@ export const useKoperasi = (account) => {
         else if (name === 'SimpananBerjangkaDibuka') allBerjangkaBuka.push(l);
         else if (name === 'SimpananBerjangkaDicairkan') allBerjangkaCair.push(l);
         else if (name === 'SHUDiterima') allSHU.push(l);
+        else if (name === 'AnggotaBaru') allBaru.push(l);
         else if (name === 'AnggotaRejoin' || name === 'MemberProfileUpdated') allMemberUpdates.push(l);
       }
 
@@ -267,6 +306,14 @@ export const useKoperasi = (account) => {
       const logBerjangkaCair = allBerjangkaCair.filter(l => getLogUser(l) === userAddr);
       const logSHU = allSHU.filter(l => getLogUser(l) === userAddr);
       const logMemberUpdates = allMemberUpdates.filter(l => getLogUser(l) === userAddr);
+      const logBaru = allBaru.filter(l => getLogUser(l) === userAddr);
+
+      // [BARU] Extract Join Date
+      if (logBaru.length > 0) {
+        const firstJoin = logBaru[0];
+        const ts = Number(firstJoin.args.timestamp || firstJoin.args[2] || 0);
+        if (ts > 0) setJoiningDate(ts);
+      }
 
       const allLogs = [
         ...logSimpanan,
@@ -278,7 +325,7 @@ export const useKoperasi = (account) => {
         ...logDitolak,
         ...logBerjangkaBuka,
         ...logBerjangkaCair,
-        ...logSHU,
+        // ...logSHU, (Hidden for presentation)
         ...logMemberUpdates
       ];
 
@@ -294,6 +341,7 @@ export const useKoperasi = (account) => {
         else if (name === 'SimpananBerjangkaDibuka') ts = Number(l.args[3]);
         else if (name === 'SimpananBerjangkaDicairkan') ts = Number(l.args[3]);
         else if (name === 'SHUDiterima') ts = Number(l.args[2]);
+        else if (name === 'AnggotaBaru') ts = Number(l.args[2]);
         else if (l.args.timestamp) ts = Number(l.args.timestamp);
         else if (l.args.waktu) ts = Number(l.args.waktu);
         else {
@@ -678,20 +726,30 @@ export const useKoperasi = (account) => {
       ]);
       
       console.log("[Admin] DIAGNOSTIC: Settings fetched from Blockchain.");
-
-      // Ethers v6 Result to POJO
-      const setts = typeof settsRaw.toObject === 'function' ? settsRaw.toObject() : settsRaw;
+      const setts = settsRaw;
 
       setAdminConfig({
         bunga: Number(bSimpanan),
         bungaPinjaman: Number(bPinjaman),
         denda: Number(denda),
-        // Indices map: [4] = Pokok, [5] = Adm
-        pokok: Number(ethers.formatUnits(setts[4] ?? setts.nominalSimpananPokok ?? 0, 18)),
-        adm: 0 // Hidden for JDCOOP compliance
+        autoColl: !!setts[0],
+        multiBranch: !!setts[1],
+        deductUpfront: !!setts[2],
+        closePeriod: !!setts[3],
+        pokok: Number(ethers.formatUnits(setts[4] || 0, 18)),
+        wajib: Number(ethers.formatUnits(setts[5] || 0, 18)),
+        minSaldo: Number(ethers.formatUnits(setts[6] || 0, 18)),
+        feeAdmin: Number(ethers.formatUnits(setts[7] || 0, 18)),
+        feeProvisi: Number(setts[8] || 0),
+        feeResiko: Number(setts[9] || 0)
       });
     } catch (e) {
-      console.error("Gagal fetch config:", e);
+      // [FIX] Silent fail for rate limiting/missing revert data. Polling will recover it.
+      if (e.code === 'CALL_EXCEPTION' || e.message?.includes('rate limit')) {
+          console.warn("[Admin] fetchAdminConfig RPC Busy/Exception. Skipping real-time update, fallback to polling.");
+      } else {
+          console.error("Gagal fetch config:", e);
+      }
     }
   };
 
@@ -818,8 +876,52 @@ export const useKoperasi = (account) => {
     }
   };
 
+  const fetchSystemStatus = async () => {
+    try {
+      const res = await fetch('http://localhost:5000/api/health');
+      const data = await res.json();
+      setSystemStatus({
+        xendit: data.xendit || 'OFFLINE',
+        tunnel: data.tunnel || 'OFFLINE',
+        blockchain: data.blockchain || 'OFFLINE',
+        adminBalance: data.adminBalance || '0',
+        webhookMismatch: data.webhookMismatch || false,
+        currentUrl: data.currentUrl || ''
+      });
+    } catch (e) {
+      setSystemStatus({ 
+        xendit: 'OFFLINE', 
+        tunnel: 'OFFLINE', 
+        blockchain: 'OFFLINE', 
+        adminBalance: '0',
+        webhookMismatch: false,
+        currentUrl: ''
+      });
+    }
+  };
+
+  const confirmWebhookUpdate = async (url) => {
+    try {
+      setIsLoading(true);
+      const res = await fetch('http://localhost:5000/api/health/confirm-webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url })
+      });
+      const data = await res.json();
+      if (data.success) {
+        await fetchSystemStatus();
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const triggerTripleSync = () => {
     console.log("[Sync] Triggering Triple-Sync Strategy (2s, 8s, 18s)...");
+    fetchSystemStatus(); // Check health on sync
     setTimeout(refresh, 2000);
     setTimeout(refresh, 8000);
     setTimeout(refresh, 18000);
@@ -947,8 +1049,6 @@ export const useKoperasi = (account) => {
           setPendingLoanUser(null);
         }
 
-        await fetchHistory(addr, kop);
-        
         await fetchHistory(addr, kop);
       } else {
         setPinjamanAktif(null);
@@ -1083,13 +1183,15 @@ export const useKoperasi = (account) => {
         // We check isPengurusVal from the contract directly or use the one set in fetchUserData
         const isPengurusVal = await kop.isPengurus(account);
         if (isPengurusVal) {
-          console.log("Admin detected, starting background data fetch...");
-          // Do NOT await these, let them run in background so UI can load
-          fetchAllLoansAdmin(kop);
-          fetchAllMembers(kop);
-          fetchAllSimpananLogs(kop);
-          fetchAllGlobalLogs(kop); // [FIX] Ensure global logs are fetched on init
-          fetchAdminStats(kop, token);
+          console.log("Admin detected, starting staggered background data fetch...");
+          setIsPengurus(true);
+          
+          // Staggered execution to respect RPC limits and avoid MetaMask 429
+          setTimeout(() => fetchAllLoansAdmin(kop), 500);
+          setTimeout(() => fetchAllMembers(kop), 1000);
+          setTimeout(() => fetchAdminStats(kop, token), 1500);
+          setTimeout(() => fetchAllSimpananLogs(kop), 2000);
+          setTimeout(() => fetchAllGlobalLogs(kop), 2500);
         }
       } catch (err) {
         console.error('Gagal init koperasi:', err);
@@ -1244,7 +1346,7 @@ export const useKoperasi = (account) => {
 
       const sukarela = BigInt(anggotaData?.simpananSukarela || 0);
       if (sukarela < amount) {
-        throw new Error(`Saldo Sukarela tidak cukup! Butuh ${formatCurrency(formatToken(amount))} IDRT.`);
+        throw new Error(`Saldo Sukarela tidak cukup! Butuh ${formatCurrency(formatToken(amount))}.`);
       }
 
       if (onProgress) onProgress('Memproses pembayaran internal (Blockchain Ledger)...');
@@ -1289,7 +1391,7 @@ export const useKoperasi = (account) => {
 
         const amountBigInt = parseToken(jumlahStr);
         if (amountBigInt > limit) {
-          throw new Error(`Melebihi limit! Maks 3x Simpanan(${formatToken(limit)} IDRT)`);
+          throw new Error(`Melebihi limit! Maks 3x Simpanan (${formatCurrency(formatToken(limit))})`);
         }
       }
 
@@ -1342,7 +1444,7 @@ export const useKoperasi = (account) => {
     const inputIDR = Number(jumlahStr);
 
     if (inputIDR > sisaIDR) {
-      throw new Error(`Jumlah melebihi sisa hutang! Sisa: ${formatCurrency(sisaIDR.toString())} IDRT`);
+      throw new Error(`Jumlah melebihi sisa hutang! Sisa: ${formatCurrency(sisaIDR.toString())}`);
     }
 
     try {
@@ -1393,7 +1495,7 @@ export const useKoperasi = (account) => {
       const sukarela = BigInt(anggotaData?.simpananSukarela || 0);
 
       if (sukarela < amount) {
-        throw new Error(`Saldo Sukarela tidak cukup! Butuh ${formatCurrency(jumlahStr)} IDRT.`);
+        throw new Error(`Saldo Sukarela tidak cukup! Butuh ${formatCurrency(jumlahStr)}.`);
       }
 
       if (onProgress) onProgress('Memproses pelunasan internal (Blockchain Ledger)...');
@@ -1534,7 +1636,7 @@ export const useKoperasi = (account) => {
       }
 
       if (effectiveBalance < needed) {
-        throw new Error(`Likuiditas Koperasi Kurang! Butuh ${formatCurrency(formatToken(needed))} IDRT, Saldo: ${formatCurrency(formatToken(effectiveBalance))} IDRT.Silahkan 'Tambah Likuiditas' di menu Manajemen Dana.`);
+        throw new Error(`Likuiditas Koperasi Kurang! Butuh ${formatCurrency(formatToken(needed))}, Saldo: ${formatCurrency(formatToken(effectiveBalance))}. Silahkan 'Tambah Likuiditas' di menu Manajemen Dana.`);
       }
 
       // 2. Execute Approval & Disbursement via Server
@@ -1681,8 +1783,18 @@ export const useKoperasi = (account) => {
   const refresh = React.useCallback(() => {
     if (account && koperasiContract && idrTokenContract) {
       fetchUserData(account, koperasiContract, idrTokenContract);
+      fetchSystemStatus(); // Refresh health status too
     }
   }, [account, koperasiContract, idrTokenContract]);
+
+  const refreshTimeout = React.useRef(null);
+  const debounceRefresh = React.useCallback(() => {
+    if (refreshTimeout.current) clearTimeout(refreshTimeout.current);
+    refreshTimeout.current = setTimeout(() => {
+        console.log("[Blockchain] Debounced refresh executing...");
+        refresh();
+    }, 1500); // 1.5s delay to let block propagation settle
+  }, [refresh]);
 
   // Payment Sync Channel
   const paymentChannel = React.useMemo(() => {
@@ -1700,35 +1812,79 @@ export const useKoperasi = (account) => {
     const paymentStatus = params.get('payment');
     
     if (paymentStatus === 'success') {
-      // Clean URL IMMEDIATELY to prevent loop before state takes effect
       window.history.replaceState({}, document.title, window.location.pathname);
-      
       const lastProcessedTime = sessionStorage.getItem('last_processed_payment');
       const now = Date.now();
       
-      // Only trigger if not processed in the last 10 seconds (prevents double fire)
       if (!lastProcessedTime || (now - Number(lastProcessedTime) > 10000)) {
-        console.log("[Payment] Redirect success detected. Keeping UI locked until Blockchain reflects change...");
-        // [FIX] We stay locked. The polling loop will handle setPaymentSuccess(true) 
-        // once the blockchain data actually changes.
+        console.log("[Payment] Redirect success detected. Locking UI...");
         setIsPaymentLocked(true);
         sessionStorage.setItem('last_processed_payment', now.toString());
       }
     }
 
-    // 2. Listen for messages from other tabs
+    // 2. [FIXED] Blockchain Real-time Wildcard Event Listener (RPC Efficient)
+    if (account && koperasiContract) {
+      console.log("[Blockchain] Attaching optimized Wildcard Event Listener...");
+      
+      // We use a single filter instead of 10+ to avoid "RPC Rate Limited" on MetaMask
+      koperasiContract.on("*", (event) => {
+          try {
+              const name = event.fragment?.name;
+              const args = event.args;
+              if (!name) return;
+
+              // 1. Global Events (Always Refresh)
+              const globalEvents = ["TagihanDibuat", "BagiHasilDirilis", "SettingsUpdated", "SurveyApproved", "CommitteeApproved", "LiquiditySynced"];
+              
+              // 2. Personal Events (Refresh only if it belongs to current user)
+              const personalEvents = ["PinjamanDisetujui", "PinjamanDitolak", "PinjamanLunas", "AnggotaBaru", "AnggotaRejoin", "DepositTercatat", "PenarikanTercatat", "SimpananBerjangkaDibuka", "SimpananBerjangkaDicairkan", "SHUDiterima", "AngsuranMasuk"];
+              
+              let shouldRefresh = globalEvents.includes(name);
+
+              if (!shouldRefresh && personalEvents.includes(name) && args) {
+                  // Check various possible argument names for addresses
+                  const relevantAddress = (args.user || args.peminjam || args.anggota || args.member || args[0])?.toString().toLowerCase();
+                  if (relevantAddress === account.toLowerCase()) {
+                      shouldRefresh = true;
+                  }
+              }
+
+              if (shouldRefresh) {
+                  console.log(`[Event] Relevant blockchain event detected: ${name}. Scheduling refresh...`);
+                  if (name === "SettingsUpdated") fetchAdminConfig(koperasiContract);
+                  debounceRefresh();
+              }
+          } catch (err) {
+              console.warn("[Blockchain] Listener error (swallowed):", err);
+          }
+      });
+
+      // 3. [NEW] Slow Polling Fallback (Every 60s)
+      const slowPoll = setInterval(refresh, 60000);
+
+      // Cleanup on unmount or account change
+      return () => {
+          console.log("[Blockchain] Removing Event Listeners...");
+          koperasiContract.removeAllListeners();
+          clearInterval(slowPoll);
+          if (refreshTimeout.current) clearTimeout(refreshTimeout.current);
+      };
+    }
+
+    // 4. Listen for messages from other tabs
     const handleMessage = (event) => {
       if (event.data.type === 'PAYMENT_LOCKED') {
         setIsPaymentLocked(true);
       } else if (event.data.type === 'PAYMENT_SUCCESS') {
         setIsPaymentLocked(false);
         setPaymentSuccess(true);
-        triggerTripleSync(); // Use TripleSync for broadcasted success
+        triggerTripleSync();
       }
     };
 
     paymentChannel.onmessage = handleMessage;
-  }, [paymentChannel, refresh]);
+  }, [account, koperasiContract, paymentChannel, refresh]);
 
   // 3. [NEW] ROBUST REAL-TIME POLLING for Payment Status
   useEffect(() => {
@@ -1896,6 +2052,7 @@ export const useKoperasi = (account) => {
     totalSimpanan,
     pinjamanAktif,
     history,
+    joiningDate,
     userTimeDeposits,
     pendingLoanUser,
     pendingLoans,
@@ -1944,6 +2101,17 @@ export const useKoperasi = (account) => {
     emergencyWithdraw,
     syncLiquidity,
     cancelPayment,
-    refreshAdminStats: () => fetchAdminStats(koperasiContract, idrTokenContract)
+    refreshAdminStats: () => fetchAdminStats(koperasiContract, idrTokenContract),
+    systemStatus,
+    fetchSystemStatus,
+    confirmWebhookUpdate,
+    updateGlobalSettings: async (newParams, onProgress) => {
+        // [FIX] Map 'wajib' back to 'adm' for blockchain/server consistency
+        const mappedParams = {
+            ...newParams,
+            adm: newParams.wajib
+        };
+        return updateGlobalSettings(mappedParams, onProgress);
+    }
   };
 };

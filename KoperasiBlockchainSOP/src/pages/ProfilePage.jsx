@@ -18,7 +18,8 @@ const ProfilePage = () => {
     isPengurus,
     isPaymentLocked,
     paymentSuccess,
-    setPaymentSuccess
+    setPaymentSuccess,
+    joiningDate
   } = useKoperasi(account);
 
   const globalMessage = walletError || message;
@@ -58,6 +59,7 @@ const ProfilePage = () => {
             anggotaData={anggotaData} 
             account={account} 
             isPengurus={isPengurus}
+            joiningDate={joiningDate}
           />
         )}
       </main>

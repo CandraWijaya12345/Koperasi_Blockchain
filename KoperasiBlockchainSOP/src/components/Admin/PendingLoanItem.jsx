@@ -8,7 +8,13 @@ const shortText = (text, start = 6, end = 4) => {
   return `${text.slice(0, start)}…${text.slice(-end)}`;
 };
 
-const PendingLoanItem = ({ log, loan, onApprove, onReject, onApproveSurvey, onApproveCommittee, loading, onNotify }) => {
+const LoadingSpinner = ({ size = 16, color = "currentColor" }) => (
+  <svg className="animate-spin" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+  </svg>
+);
+
+const PendingLoanItem = ({ log, loan, onApprove, onReject, onApproveSurvey, onApproveCommittee, loading, onNotify, systemStatus, adminConfig }) => {
   const data = loan || log;
   if (!data) return null;
 
@@ -108,6 +114,37 @@ const PendingLoanItem = ({ log, loan, onApprove, onReject, onApproveSurvey, onAp
         </div>
       </div>
 
+      {/* [NEW] Fee Breakdown Section */}
+      <div style={{ background: '#f8fafc', borderRadius: '12px', padding: '16px', border: '1px solid #e2e8f0' }}>
+        <p style={{ fontSize: '0.7rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '10px', letterSpacing: '0.05em' }}>Rencana Pencairan & Biaya</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '16px' }}>
+            <div>
+                <div style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: '600' }}>BIAYA ADMIN</div>
+                <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#334155' }}>{formatCurrency(adminConfig?.feeAdmin || 0)}</div>
+            </div>
+            <div>
+                <div style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: '600' }}>PROVISI ({adminConfig?.feeProvisi || 0}%)</div>
+                <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#334155' }}>
+                    {formatCurrency(((loan?.jumlahPinjaman ?? args?.jumlah ?? 0n) * BigInt(adminConfig?.feeProvisi || 0)) / 100n / 10n**18n)}
+                </div>
+            </div>
+            <div>
+                <div style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: '600' }}>DANA DITERIMA</div>
+                <div style={{ fontSize: '0.9rem', fontWeight: '800', color: '#166534' }}>
+                    {adminConfig?.deductUpfront ? 
+                        formatCurrency(formatToken(loan?.jumlahPinjaman ?? args?.jumlah ?? 0n) - (adminConfig?.feeAdmin || 0) - (formatToken(loan?.jumlahPinjaman ?? args?.jumlah ?? 0n) * (adminConfig?.feeProvisi || 0) / 100))
+                        : formatCurrency(formatToken(loan?.jumlahPinjaman ?? args?.jumlah ?? 0n))}
+                </div>
+            </div>
+            <div>
+                <div style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: '600' }}>STRATEGI BIAYA</div>
+                <div style={{ fontSize: '0.75rem', fontWeight: '700', color: adminConfig?.deductUpfront ? '#ea580c' : '#2563eb' }}>
+                    {adminConfig?.deductUpfront ? 'POTONG DI AWAL' : 'TAMBAH KE TENOR'}
+                </div>
+            </div>
+        </div>
+      </div>
+
       <div style={{ marginTop: '10px' }}>
         {confirmAction ? (
           <div style={{ background: confirmAction === 'approve' ? '#f0fdf4' : '#fef2f2', border: `1px solid ${confirmAction === 'approve' ? '#22c55e' : '#ef4444'}`, borderRadius: '12px', padding: '16px' }}>
@@ -138,7 +175,13 @@ const PendingLoanItem = ({ log, loan, onApprove, onReject, onApproveSurvey, onAp
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
               <button 
                 onClick={() => setConfirmAction(null)}
-                style={{ background: '#fff', border: '1px solid #d1d5db', padding: '8px 16px', borderRadius: '8px', fontWeight: '600' }}
+                disabled={isActing}
+                style={{ 
+                  background: '#fff', border: '1px solid #d1d5db', padding: '8px 16px', 
+                  borderRadius: '8px', fontWeight: '600',
+                  cursor: isActing ? 'not-allowed' : 'pointer',
+                  opacity: isActing ? 0.6 : 1
+                }}
               >Batal</button>
               <button 
                 disabled={isActing}
@@ -148,9 +191,20 @@ const PendingLoanItem = ({ log, loan, onApprove, onReject, onApproveSurvey, onAp
                   else if (status === 1) processAction(onApproveCommittee);
                   else processAction(onApprove);
                 }}
-                style={{ background: confirmAction === 'approve' ? '#22c55e' : '#ef4444', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '8px', fontWeight: '700' }}
+                style={{ 
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                  background: confirmAction === 'approve' ? '#22c55e' : '#ef4444', 
+                  color: '#fff', border: 'none', padding: '8px 24px', borderRadius: '8px', 
+                  fontWeight: '700', cursor: isActing ? 'not-allowed' : 'pointer',
+                  opacity: isActing ? 0.7 : 1
+                }}
               >
-                {isActing ? '...' : 'Konfirmasi'}
+                {isActing ? (
+                  <>
+                    <LoadingSpinner size={18} />
+                    <span>Memproses...</span>
+                  </>
+                ) : 'Konfirmasi'}
               </button>
             </div>
           </div>
@@ -158,20 +212,29 @@ const PendingLoanItem = ({ log, loan, onApprove, onReject, onApproveSurvey, onAp
           <div style={{ display: 'flex', gap: '12px' }}>
             <button 
               onClick={() => setConfirmAction('approve')}
-              disabled={isActing}
+              disabled={isActing || systemStatus?.xendit !== 'ONLINE' || systemStatus?.tunnel !== 'ONLINE'}
+              title={
+                systemStatus?.xendit !== 'ONLINE' ? "Xendit API Offline" : 
+                systemStatus?.tunnel !== 'ONLINE' ? "NGrok Tunnel Offline - Harap nyalakan NGrok" : 
+                ""
+              }
               style={{ 
                 flex: 2, 
-                background: status === 2 ? '#10b981' : '#2563eb', 
+                background: (systemStatus?.xendit === 'ONLINE' && systemStatus?.tunnel === 'ONLINE') 
+                  ? (status === 2 ? '#10b981' : '#2563eb') 
+                  : '#94a3b8', 
                 color: '#fff', 
                 border: 'none', 
                 padding: '12px', 
                 borderRadius: '10px', 
                 fontWeight: '700', 
-                cursor: isActing ? 'not-allowed' : 'pointer',
-                opacity: isActing ? 0.6 : 1
+                cursor: (isActing || systemStatus?.xendit !== 'ONLINE' || systemStatus?.tunnel !== 'ONLINE') ? 'not-allowed' : 'pointer',
+                opacity: (isActing || systemStatus?.xendit !== 'ONLINE' || systemStatus?.tunnel !== 'ONLINE') ? 0.6 : 1
               }}
             >
-              {getButtonText()}
+              {systemStatus?.tunnel !== 'ONLINE' ? 'Tunnel Offline' : 
+               systemStatus?.xendit !== 'ONLINE' ? 'Xendit Offline' : 
+               getButtonText()}
             </button>
             <button 
               onClick={() => setConfirmAction('reject')}

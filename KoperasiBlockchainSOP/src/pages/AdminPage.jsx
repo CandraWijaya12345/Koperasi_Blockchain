@@ -67,7 +67,10 @@ const AdminPage = () => {
     approveCommittee,
     generateMonthlyBills,
     releaseProfitSharing,
-    closeMembership
+    closeMembership,
+    systemStatus,
+    fetchSystemStatus,
+    confirmWebhookUpdate
   } = useKoperasi(account);
 
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -79,6 +82,15 @@ const AdminPage = () => {
       fetchAllGlobalLogs();
     }
   }, [activeTab, account, fetchAllGlobalLogs]);
+
+  // [NEW] Polling Health
+  useEffect(() => {
+    if (account) {
+      fetchSystemStatus();
+      const interval = setInterval(fetchSystemStatus, 30000); // Check every 30s
+      return () => clearInterval(interval);
+    }
+  }, [account]);
 
   // ===============================
   // PROTEKSI AKSES ADMIN
@@ -170,8 +182,8 @@ const AdminPage = () => {
         <aside style={styles.sidebar}>
           <div style={styles.sidebarHeader}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ width: '32px', height: '32px', background: '#3b82f6', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold' }}>JD</div>
-              <span style={styles.brandLogo}>JDCOOP <span style={{ color: '#94a3b8' }}>Admin</span></span>
+              <div style={{ width: '32px', height: '32px', background: '#3b82f6', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold' }}>KK</div>
+              <span style={styles.brandLogo}>Koperasi Kita <span style={{ color: '#94a3b8' }}>Admin</span></span>
             </div>
           </div>
 
@@ -190,7 +202,65 @@ const AdminPage = () => {
         </aside>
 
         <div style={styles.main}>
-          <header style={styles.topbar}></header>
+          <header style={styles.topbar}>
+            <div>
+              <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#1e293b' }}>Control Center</h2>
+            </div>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              {/* [CONSUL] Unified System Health Indicator */}
+              <div 
+                onClick={() => {
+                  if (systemStatus.xendit !== 'ONLINE' || systemStatus.tunnel !== 'ONLINE' || systemStatus.webhookMismatch) {
+                    setActiveTab('pengaturan');
+                  }
+                }}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '10px', 
+                  background: (systemStatus.xendit === 'ONLINE' && systemStatus.tunnel === 'ONLINE' && !systemStatus.webhookMismatch) ? '#f0fdf4' : '#fff1f2',
+                  padding: '8px 16px',
+                  borderRadius: '12px',
+                  border: `1px solid ${(systemStatus.xendit === 'ONLINE' && systemStatus.tunnel === 'ONLINE' && !systemStatus.webhookMismatch) ? '#22c55e' : '#f43f5e'}`,
+                  cursor: (systemStatus.xendit !== 'ONLINE' || systemStatus.tunnel !== 'ONLINE' || systemStatus.webhookMismatch) ? 'pointer' : 'default',
+                  position: 'relative',
+                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  boxShadow: (systemStatus.xendit === 'ONLINE' && systemStatus.tunnel === 'ONLINE' && !systemStatus.webhookMismatch) ? 'none' : '0 0 15px rgba(244, 63, 94, 0.2)',
+                  group: 'status-indicator'
+                }}
+                title={`Xendit API: ${systemStatus.xendit}\nTunnel (NGrok): ${systemStatus.tunnel}\nWebhook Sync: ${systemStatus.webhookMismatch ? 'SINKRONISASI DIPERLUKAN' : 'OK'}`}
+              >
+                <div style={{ 
+                  width: '10px', 
+                  height: '10px', 
+                  borderRadius: '50%', 
+                  background: (systemStatus.xendit === 'ONLINE' && systemStatus.tunnel === 'ONLINE' && !systemStatus.webhookMismatch) ? '#22c55e' : '#f43f5e',
+                  boxShadow: (systemStatus.xendit === 'ONLINE' && systemStatus.tunnel === 'ONLINE' && !systemStatus.webhookMismatch) ? '0 0 8px #22c55e' : '0 0 12px #f43f5e',
+                  animation: (systemStatus.xendit !== 'ONLINE' || systemStatus.tunnel !== 'ONLINE' || systemStatus.webhookMismatch) ? 'pulse-error 1.5s infinite' : 'none'
+                }}></div>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ fontSize: '0.6rem', fontWeight: '800', color: (systemStatus.xendit === 'ONLINE' && systemStatus.tunnel === 'ONLINE' && !systemStatus.webhookMismatch) ? '#15803d' : '#9f1239', textTransform: 'uppercase', letterSpacing: '0.05em', lineHeight: 1 }}>System Health</span>
+                  <span style={{ fontSize: '0.8rem', fontWeight: '900', color: (systemStatus.xendit === 'ONLINE' && systemStatus.tunnel === 'ONLINE' && !systemStatus.webhookMismatch) ? '#166534' : '#be123c' }}>
+                    {(systemStatus.xendit === 'ONLINE' && systemStatus.tunnel === 'ONLINE' && !systemStatus.webhookMismatch) ? 'ONLINE' : 'ATTENTION REQUIRED'}
+                  </span>
+                </div>
+                
+                <style>{`
+                  @keyframes pulse-error {
+                    0% { transform: scale(0.9); opacity: 0.8; }
+                    50% { transform: scale(1.1); opacity: 1; box-shadow: 0 0 20px #f43f5e; }
+                    100% { transform: scale(0.9); opacity: 0.8; }
+                  }
+                `}</style>
+              </div>
+
+              <div style={styles.profileBox}>
+                <div style={styles.profileAvatar}>A</div>
+                <span style={{ marginLeft: '10px', fontSize: '0.9rem', fontWeight: '600', color: '#1e293b' }}>Administrator</span>
+              </div>
+            </div>
+          </header>
 
           {globalMessage && (
             <div style={styles.messageBanner}>
@@ -204,6 +274,7 @@ const AdminPage = () => {
               <span>⚠️ Saldo POL Rendah: {adminStats.adminPolBalance} POL</span>
             </div>
           )}
+
 
           <main style={styles.content}>
             {activeTab === 'dashboard' && (
@@ -230,6 +301,7 @@ const AdminPage = () => {
                       onApproveSurvey={approveSurvey}
                       onApproveCommittee={approveCommittee}
                       isLoading={isLoading} 
+                      adminConfig={adminConfig}
                     />
                   </div>
                 </div>
@@ -252,6 +324,8 @@ const AdminPage = () => {
                   onApproveSurvey={approveSurvey} 
                   onApproveCommittee={approveCommittee} 
                   isLoading={isLoading} 
+                  systemStatus={systemStatus}
+                  adminConfig={adminConfig}
                 />
               </div>
             )}
@@ -260,6 +334,7 @@ const AdminPage = () => {
               <div style={styles.pageCard}>
                 <GovernancePanel 
                   stats={adminStats} 
+                  config={adminConfig}
                   members={memberList}
                   onSync={syncLiquidity} 
                   onGenerateBills={generateMonthlyBills} 
@@ -285,7 +360,13 @@ const AdminPage = () => {
 
             {activeTab === 'pengaturan' && (
               <div style={styles.pageCard}>
-                <AdminSettings config={adminConfig} onUpdate={updateGlobalSettings} isLoading={isLoading} />
+                <AdminSettings 
+                  config={adminConfig} 
+                  onUpdate={updateGlobalSettings} 
+                  isLoading={isLoading} 
+                  systemStatus={systemStatus}
+                  confirmWebhookUpdate={confirmWebhookUpdate}
+                />
               </div>
             )}
           </main>
