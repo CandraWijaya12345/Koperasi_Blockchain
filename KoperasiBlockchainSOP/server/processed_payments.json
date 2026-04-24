@@ -229,5 +229,54 @@
     "description": "Angsuran Pinjaman #5 - 0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
     "status": "COMPLETED",
     "lastUpdate": "2026-04-22T06:21:19.314Z"
+  },
+  "TRX-1776842178850-772": {
+    "userAddress": "0xd17c0bd5deed0df5f783c697a2e5a99ad7ee4ab4",
+    "amount": 100000,
+    "description": "Simpanan Koperasi (Pokok) - 0xd17c0bd5deed0df5f783c697a2e5a99ad7ee4ab4",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-04-22T07:16:47.955Z"
+  },
+  "TRX-1776842359620-287": {
+    "userAddress": "0xd17c0bd5deed0df5f783c697a2e5a99ad7ee4ab4",
+    "amount": 15000,
+    "description": "Simpanan Koperasi (Sukarela) - 0xd17c0bd5deed0df5f783c697a2e5a99ad7ee4ab4",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-04-22T07:19:34.572Z"
+  },
+  "TRX-1776843193039-99": {
+    "userAddress": "0xeb086198637df4033098b45f786eeb425270faca",
+    "amount": 100000,
+    "description": "Simpanan Koperasi (Pokok) - 0xeb086198637df4033098b45f786eeb425270faca",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-04-22T07:33:49.138Z"
+  },
+  "TRX-1776843385706-843": {
+    "userAddress": "0xeb086198637df4033098b45f786eeb425270faca",
+    "amount": 15000,
+    "description": "Simpanan Koperasi (Sukarela) - 0xeb086198637df4033098b45f786eeb425270faca",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-04-22T07:36:44.816Z"
+  },
+  "TRX-1776843632636-649": {
+    "userAddress": "0xeb086198637df4033098b45f786eeb425270faca",
+    "amount": 25000,
+    "description": "Simpanan Koperasi (Wajib) - 0xeb086198637df4033098b45f786eeb425270faca",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-04-22T07:40:42.086Z"
+  },
+  "REPAY-8-1776844068971-300": {
+    "userAddress": "0xeb086198637df4033098b45f786eeb425270faca",
+    "amount": 200000,
+    "description": "Angsuran Pinjaman #8 - 0xeb086198637df4033098b45f786eeb425270faca",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-04-22T07:47:58.756Z"
+  },
+  "REPAY-8-1776844120063-308": {
+    "userAddress": "0xeb086198637df4033098b45f786eeb425270faca",
+    "amount": 24000,
+    "description": "Angsuran Pinjaman #8 - 0xeb086198637df4033098b45f786eeb425270faca",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-04-22T07:48:53.710Z"
   }
 }
