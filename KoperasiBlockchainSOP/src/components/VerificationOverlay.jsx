@@ -1,6 +1,6 @@
 import React from 'react';
 
-const VerificationOverlay = ({ isVisible, message = 'Memverifikasi Transaksi di Blockchain...', onCancel }) => {
+const VerificationOverlay = ({ isVisible, message = 'Memverifikasi Transaksi di Blockchain...', description, onCancel }) => {
   if (!isVisible) return null;
 
   return (
@@ -79,8 +79,7 @@ const VerificationOverlay = ({ isVisible, message = 'Memverifikasi Transaksi di 
         border: '1px solid rgba(255,255,255,0.1)'
       }}>
         <p style={{ fontSize: '0.95rem', color: '#cbd5e1', lineHeight: '1.6', margin: 0 }}>
-          Sistem sedang mendeteksi perubahan saldo di wallet Anda. 
-          Halaman akan me-refresh secara otomatis setelah data berhasil disinkronkan.
+          {description || 'Sistem sedang mendeteksi perubahan saldo di wallet Anda. Halaman akan me-refresh secara otomatis setelah data berhasil disinkronkan.'}
         </p>
       </div>
 

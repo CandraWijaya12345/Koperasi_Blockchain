@@ -10,7 +10,7 @@ async function checkAdminBalance() {
         const contractAddr = process.env.CONTRACT_ADDRESS;
         const abi = ['function idrToken() view returns (address)'];
         const contract = new ethers.Contract(contractAddr, abi, provider);
-        const tokenAddr = await contract.idrToken();
+        const tokenAddr = await contract.saldoIDR();
 
         console.log("Admin Wallet:", wallet.address);
         console.log("Balance:", ethers.formatEther(balance), "POL");

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import PendingLoanItem from './PendingLoanItem';
 import InlineMessage from '../InlineMessage'; // Import InlineMessage
-import { formatCurrency, formatToken } from '../../utils/format';
+import { formatCurrency, formatrupiah } from '../../utils/format';
 
 const LoanManagement = ({ allLoans, onApprove, onReject, onApproveSurvey, onApproveCommittee, isLoading, systemStatus, adminConfig }) => {
     const [activeTab, setActiveTab] = useState('pending'); // pending, active, paid, rejected
@@ -47,7 +47,7 @@ const LoanManagement = ({ allLoans, onApprove, onReject, onApproveSurvey, onAppr
                             const id = Number(loan.args.id || loan.args.loanId);
                             const peminjam = loan.args.peminjam || '0x...';
                             const rawAmount = loan.amountOverride || loan.args.jumlah || loan.args.jumlahPinjaman || 0n;
-                            const jumlah = formatCurrency(formatToken(rawAmount));
+                            const jumlah = formatCurrency(formatrupiah(rawAmount));
 
                             // Date handling
                             const dateObj = new Date(loan.extractedTimestamp * 1000);
@@ -225,11 +225,11 @@ const LoanManagement = ({ allLoans, onApprove, onReject, onApproveSurvey, onAppr
                                 <div>
                                     <p style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', marginBottom: '4px' }}>Nominal Pinjaman</p>
                                     <p style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>
-                                        {formatCurrency(formatToken(selectedLoan.amountOverride || selectedLoan.args.jumlah || selectedLoan.args.jumlahPinjaman || 0n))}
+                                        {formatCurrency(formatrupiah(selectedLoan.amountOverride || selectedLoan.args.jumlah || selectedLoan.args.jumlahPinjaman || 0n))}
                                     </p>
                                 </div>
                                 <div>
-                                    <p style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', marginBottom: '4px' }}>Tgl. Pengajuan</p>
+                                    <p style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', marginBottom: '4px' }}>Tanggal Pengajuan</p>
                                     <p style={{ fontSize: '1rem', fontWeight: '600', color: '#334155', margin: 0 }}>
                                         {new Date(selectedLoan.extractedTimestamp * 1000).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
                                     </p>

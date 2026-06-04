@@ -19,6 +19,7 @@ const ProfilePage = () => {
     isPaymentLocked,
     paymentSuccess,
     setPaymentSuccess,
+    cancelPayment,
     joiningDate
   } = useKoperasi(account);
 
@@ -33,6 +34,54 @@ const ProfilePage = () => {
         isLoading={isConnecting || isLoading}
         activeTab="profil" // Force active tab for navbar styling
       />
+
+      {isPaymentLocked && (
+        <div style={{
+          background: '#eff6ff',
+          borderBottom: '1px solid #bfdbfe',
+          color: '#1e40af',
+          padding: '12px 24px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          fontSize: '0.9rem',
+          fontWeight: '500',
+          animation: 'fadeIn 0.3s ease-out'
+        }}>
+          <style>{`
+            @keyframes pulseBanner { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.9); } }
+          `}</style>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ 
+              display: 'inline-block',
+              width: '8px',
+              height: '8px',
+              backgroundColor: '#3b82f6',
+              borderRadius: '50%',
+              animation: 'pulseBanner 1.5s infinite'
+            }}></span>
+            <span>Sedang memverifikasi pembayaran Anda di latar belakang... Halaman akan terupdate secara otomatis.</span>
+          </div>
+          <button 
+            onClick={cancelPayment}
+            style={{
+              background: 'transparent',
+              border: '1px solid #3b82f6',
+              color: '#3b82f6',
+              padding: '4px 12px',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontSize: '0.8rem',
+              fontWeight: '600',
+              transition: 'all 0.2s'
+            }}
+            onMouseOver={(e) => { e.target.style.backgroundColor = 'rgba(59, 130, 246, 0.05)'; }}
+            onMouseOut={(e) => { e.target.style.backgroundColor = 'transparent'; }}
+          >
+            Batal / Reset
+          </button>
+        </div>
+      )}
 
       {globalMessage && (
         <div style={layout.messageWrapper}>
@@ -68,7 +117,7 @@ const ProfilePage = () => {
         <p>© 2026 Koperasi Simpan Pinjam Blockchain</p>
       </footer>
 
-      <PaymentOverlay isVisible={isPaymentLocked} />
+
       <SuccessModal 
         isVisible={paymentSuccess} 
         onClose={() => setPaymentSuccess(false)} 

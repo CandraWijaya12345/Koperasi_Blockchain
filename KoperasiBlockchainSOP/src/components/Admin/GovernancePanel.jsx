@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { cardStyles } from '../../styles/cards';
 import InlineMessage from '../InlineMessage';
-import { formatCurrency, formatToken, parseToken } from '../../utils/format';
+import { formatCurrency, formatrupiah, parserupiah } from '../../utils/format';
 
 // --- Professional Icons ---
 const SyncIcon = () => (
@@ -13,6 +13,9 @@ const BillIcon = () => (
 );
 const ProfitIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="12" rx="2" /><circle cx="12" cy="12" r="2" /><path d="M6 12h.01M18 12h.01" /></svg>
+);
+const AlertIcon = ({ size = 20 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
 );
 
 const localStyles = {
@@ -165,11 +168,11 @@ const SHUConfirmationModal = ({ stats, members, sharingPercent, onConfirm, onCan
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px' }}>
             <div style={{ padding: '16px', borderRadius: '16px', backgroundColor: '#f8fafc', border: '1px solid #f1f5f9' }}>
               <div style={{ fontSize: '0.7rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>Total Profit (100%)</div>
-              <div style={{ fontSize: '1rem', fontWeight: '800', color: '#0f172a' }}>{formatCurrency(formatToken(rawProfit))}</div>
+              <div style={{ fontSize: '1rem', fontWeight: '800', color: '#0f172a' }}>{formatCurrency(formatrupiah(rawProfit))}</div>
             </div>
             <div style={{ padding: '16px', borderRadius: '16px', backgroundColor: '#eff6ff', border: '1px solid #dbeafe' }}>
               <div style={{ fontSize: '0.7rem', fontWeight: '700', color: '#2563eb', textTransform: 'uppercase', marginBottom: '4px' }}>Alokasi ({sharingPercent}%)</div>
-              <div style={{ fontSize: '1rem', fontWeight: '800', color: '#1e40af' }}>{formatCurrency(formatToken(amountToDistribute))}</div>
+              <div style={{ fontSize: '1rem', fontWeight: '800', color: '#1e40af' }}>{formatCurrency(formatrupiah(amountToDistribute))}</div>
             </div>
             <div style={{ padding: '16px', borderRadius: '16px', backgroundColor: '#f0fdf4', border: '1px solid #dcfce7' }}>
               <div style={{ fontSize: '0.7rem', fontWeight: '700', color: '#16a34a', textTransform: 'uppercase', marginBottom: '4px' }}>Penerima</div>
@@ -195,10 +198,10 @@ const SHUConfirmationModal = ({ stats, members, sharingPercent, onConfirm, onCan
                       <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontFamily: 'monospace' }}>{s.address.substring(0, 10)}...</div>
                     </td>
                     <td style={{ padding: '12px 16px', textAlign: 'right', color: '#64748b' }}>
-                      {formatCurrency(formatToken(s.totalSavings))}
+                      {formatCurrency(formatrupiah(s.totalSavings))}
                     </td>
                     <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '700', color: '#059669' }}>
-                      {formatCurrency(formatToken(s.share))}
+                      {formatCurrency(formatrupiah(s.share))}
                     </td>
                   </tr>
                 ))}
@@ -300,7 +303,7 @@ const GovernancePanel = ({ stats, config, members, onSync, onGenerateBills, onRe
             </div>
             <div style={{ ...localStyles.statRow, marginBottom: 0 }}>
               <span style={localStyles.statLabel}>Saldo Kontrak</span>
-              <span style={localStyles.statValue}>{formatCurrency(formatToken(parseToken(stats.contractBalance || '0')))}</span>
+              <span style={localStyles.statValue}>{formatCurrency(formatrupiah(parserupiah(stats.contractBalance || '0')))}</span>
             </div>
           </div>
           <button
@@ -319,7 +322,10 @@ const GovernancePanel = ({ stats, config, members, onSync, onGenerateBills, onRe
             <h3 style={localStyles.cardTitle}>Penerbitan Tagihan</h3>
           </div>
           <p style={localStyles.description}>
-            Otomasi penerbitan tagihan Simpanan Wajib bulanan untuk seluruh anggota koperasi yang terdaftar.
+            Otomasi penerbitan tagihan Simpanan Wajib bulanan untuk seluruh anggota koperasi. 
+            <span style={{ color: '#ef4444', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
+              <AlertIcon size={14} /> Akumulatif: Menambah tagihan yang sudah ada.
+            </span>
           </p>
           <label style={localStyles.inputLabel}>Nominal Per Anggota (IDR)</label>
           <input

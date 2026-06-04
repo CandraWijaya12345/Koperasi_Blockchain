@@ -1,49 +1,5 @@
 [
   {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_amount",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_tenorBulan",
-        "type": "uint256"
-      }
-    ],
-    "name": "ajukanPinjaman",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_loanId",
-        "type": "uint256"
-      }
-    ],
-    "name": "approveCommittee",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_nominal",
-        "type": "uint256"
-      }
-    ],
-    "name": "generateMonthlyBills",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
     "inputs": [],
     "stateMutability": "nonpayable",
     "type": "constructor"
@@ -145,24 +101,6 @@
     "type": "event"
   },
   {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_loanId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "string",
-        "name": "_note",
-        "type": "string"
-      }
-    ],
-    "name": "approveSurvey",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
     "anonymous": false,
     "inputs": [
       {
@@ -205,50 +143,6 @@
     ],
     "name": "BagiHasilDirilis",
     "type": "event"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_loanId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_amount",
-        "type": "uint256"
-      }
-    ],
-    "name": "bayarAngsuranInternal",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_amount",
-        "type": "uint256"
-      }
-    ],
-    "name": "bayarTagihanWajib",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_index",
-        "type": "uint256"
-      }
-    ],
-    "name": "cairkanSimpananBerjangka",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
   },
   {
     "anonymous": false,
@@ -387,18 +281,12 @@
       },
       {
         "indexed": false,
-        "internalType": "string",
-        "name": "field",
-        "type": "string"
-      },
-      {
-        "indexed": false,
         "internalType": "uint256",
-        "name": "timestamp",
+        "name": "refundAmount",
         "type": "uint256"
       }
     ],
-    "name": "MemberProfileUpdated",
+    "name": "MembershipClosed",
     "type": "event"
   },
   {
@@ -412,44 +300,19 @@
       },
       {
         "indexed": false,
-        "internalType": "uint256",
-        "name": "refundAmount",
-        "type": "uint256"
-      }
-    ],
-    "name": "MembershipClosed",
-    "type": "event"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_amount",
-        "type": "uint256"
-      }
-    ],
-    "name": "memberWithdraw",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_amount",
-        "type": "uint256"
+        "internalType": "string",
+        "name": "field",
+        "type": "string"
       },
       {
+        "indexed": false,
         "internalType": "uint256",
-        "name": "_tenorBulan",
+        "name": "timestamp",
         "type": "uint256"
       }
     ],
-    "name": "openSimpananBerjangka",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
+    "name": "MemberProfileUpdated",
+    "type": "event"
   },
   {
     "anonymous": false,
@@ -621,155 +484,6 @@
     "type": "event"
   },
   {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_loanId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_amount",
-        "type": "uint256"
-      }
-    ],
-    "name": "recordAngsuran",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_user",
-        "type": "address"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_amount",
-        "type": "uint256"
-      },
-      {
-        "internalType": "bool",
-        "name": "_isWajib",
-        "type": "bool"
-      }
-    ],
-    "name": "recordDeposit",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_user",
-        "type": "address"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_amount",
-        "type": "uint256"
-      }
-    ],
-    "name": "recordWithdrawal",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "components": [
-          {
-            "internalType": "address",
-            "name": "user",
-            "type": "address"
-          },
-          {
-            "internalType": "string",
-            "name": "nama",
-            "type": "string"
-          },
-          {
-            "internalType": "string",
-            "name": "noHP",
-            "type": "string"
-          },
-          {
-            "internalType": "string",
-            "name": "noKTP",
-            "type": "string"
-          },
-          {
-            "internalType": "string",
-            "name": "alamat",
-            "type": "string"
-          },
-          {
-            "internalType": "string",
-            "name": "gender",
-            "type": "string"
-          },
-          {
-            "internalType": "string",
-            "name": "job",
-            "type": "string"
-          },
-          {
-            "internalType": "string",
-            "name": "emergency",
-            "type": "string"
-          },
-          {
-            "internalType": "uint256",
-            "name": "branchId",
-            "type": "uint256"
-          }
-        ],
-        "internalType": "struct KoperasiSimpanPinjam.RegisterParams",
-        "name": "p",
-        "type": "tuple"
-      }
-    ],
-    "name": "registerMember",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "renounceOwnership",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_loanId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_newTenor",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_newTotal",
-        "type": "uint256"
-      }
-    ],
-    "name": "restrukturPinjaman",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
     "anonymous": false,
     "inputs": [
       {
@@ -793,86 +507,6 @@
     ],
     "name": "RestrukturTercatat",
     "type": "event"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_percentage",
-        "type": "uint256"
-      }
-    ],
-    "name": "rilisBagiHasil",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_totalAmountToDistribute",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_totalSimpananSnapshot",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_startIndex",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_count",
-        "type": "uint256"
-      }
-    ],
-    "name": "rilisBagiHasilBatch",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_persenTahunan",
-        "type": "uint256"
-      }
-    ],
-    "name": "setBungaPinjaman",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_persenTahunan",
-        "type": "uint256"
-      }
-    ],
-    "name": "setBungaSimpanan",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_permil",
-        "type": "uint256"
-      }
-    ],
-    "name": "setDendaHarian",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
   },
   {
     "anonymous": false,
@@ -919,17 +553,35 @@
     "type": "event"
   },
   {
+    "anonymous": false,
     "inputs": [
       {
+        "indexed": true,
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      },
+      {
+        "indexed": false,
         "internalType": "uint256",
-        "name": "_loanId",
+        "name": "amount",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "bunga",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "timestamp",
         "type": "uint256"
       }
     ],
-    "name": "setujuiPinjaman",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
+    "name": "SimpananBerjangkaDicairkan",
+    "type": "event"
   },
   {
     "anonymous": false,
@@ -968,20 +620,14 @@
       {
         "indexed": true,
         "internalType": "address",
-        "name": "user",
+        "name": "admin",
         "type": "address"
       },
       {
         "indexed": false,
-        "internalType": "uint256",
-        "name": "amount",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "bunga",
-        "type": "uint256"
+        "internalType": "bool",
+        "name": "useIPFS",
+        "type": "bool"
       },
       {
         "indexed": false,
@@ -990,7 +636,7 @@
         "type": "uint256"
       }
     ],
-    "name": "SimpananBerjangkaDicairkan",
+    "name": "StorageModeUpdated",
     "type": "event"
   },
   {
@@ -1034,12 +680,30 @@
   {
     "inputs": [
       {
-        "internalType": "address",
-        "name": "_admin",
-        "type": "address"
+        "internalType": "uint256",
+        "name": "_amount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_tenorBulan",
+        "type": "uint256"
       }
     ],
-    "name": "tambahPengurus",
+    "name": "ajukanPinjaman",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_loanId",
+        "type": "uint256"
+      }
+    ],
+    "name": "approveCommittee",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1053,37 +717,11 @@
       },
       {
         "internalType": "string",
-        "name": "_alasan",
+        "name": "_note",
         "type": "string"
       }
     ],
-    "name": "tolakPinjaman",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "newOwner",
-        "type": "address"
-      }
-    ],
-    "name": "transferOwnership",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_member",
-        "type": "address"
-      }
-    ],
-    "name": "tutupKeanggotaan",
+    "name": "approveSurvey",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1096,77 +734,12 @@
         "type": "uint256"
       },
       {
-        "internalType": "enum KoperasiSimpanPinjam.Kolektibilitas",
-        "name": "_status",
-        "type": "uint8"
+        "internalType": "uint256",
+        "name": "_amount",
+        "type": "uint256"
       }
     ],
-    "name": "updateCollectibilityStatus",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "components": [
-          {
-            "internalType": "bool",
-            "name": "autoColl",
-            "type": "bool"
-          },
-          {
-            "internalType": "bool",
-            "name": "multiBranch",
-            "type": "bool"
-          },
-          {
-            "internalType": "bool",
-            "name": "deductUpfront",
-            "type": "bool"
-          },
-          {
-            "internalType": "bool",
-            "name": "closePeriod",
-            "type": "bool"
-          },
-          {
-            "internalType": "uint256",
-            "name": "pokok",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "adm",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "minSaldo",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "feeAdmin",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "feeProvisi",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "feeResiko",
-            "type": "uint256"
-          }
-        ],
-        "internalType": "struct KoperasiSimpanPinjam.SettingsParams",
-        "name": "p",
-        "type": "tuple"
-      }
-    ],
-    "name": "updateGlobalSettings",
+    "name": "bayarAngsuranInternal",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1175,44 +748,11 @@
     "inputs": [
       {
         "internalType": "uint256",
-        "name": "_newBalance",
+        "name": "_amount",
         "type": "uint256"
       }
     ],
-    "name": "updateLiquidityPool",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_user",
-        "type": "address"
-      },
-      {
-        "internalType": "string",
-        "name": "_nama",
-        "type": "string"
-      },
-      {
-        "internalType": "string",
-        "name": "_noHP",
-        "type": "string"
-      },
-      {
-        "internalType": "string",
-        "name": "_alamat",
-        "type": "string"
-      },
-      {
-        "internalType": "string",
-        "name": "_job",
-        "type": "string"
-      }
-    ],
-    "name": "updateMemberProfile",
+    "name": "bayarTagihanWajib",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1246,6 +786,19 @@
   {
     "inputs": [
       {
+        "internalType": "uint256",
+        "name": "_index",
+        "type": "uint256"
+      }
+    ],
+    "name": "cairkanSimpananBerjangka",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "address",
         "name": "",
         "type": "address"
@@ -1270,32 +823,7 @@
       },
       {
         "internalType": "string",
-        "name": "noHP",
-        "type": "string"
-      },
-      {
-        "internalType": "string",
-        "name": "noKTP",
-        "type": "string"
-      },
-      {
-        "internalType": "string",
-        "name": "alamat",
-        "type": "string"
-      },
-      {
-        "internalType": "string",
-        "name": "jenisKelamin",
-        "type": "string"
-      },
-      {
-        "internalType": "string",
-        "name": "pekerjaan",
-        "type": "string"
-      },
-      {
-        "internalType": "string",
-        "name": "kontakDarurat",
+        "name": "profileHash",
         "type": "string"
       },
       {
@@ -1420,6 +948,19 @@
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_nominal",
+        "type": "uint256"
+      }
+    ],
+    "name": "generateMonthlyBills",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "getAllMembers",
     "outputs": [
@@ -1447,32 +988,7 @@
           },
           {
             "internalType": "string",
-            "name": "noHP",
-            "type": "string"
-          },
-          {
-            "internalType": "string",
-            "name": "noKTP",
-            "type": "string"
-          },
-          {
-            "internalType": "string",
-            "name": "alamat",
-            "type": "string"
-          },
-          {
-            "internalType": "string",
-            "name": "jenisKelamin",
-            "type": "string"
-          },
-          {
-            "internalType": "string",
-            "name": "pekerjaan",
-            "type": "string"
-          },
-          {
-            "internalType": "string",
-            "name": "kontakDarurat",
+            "name": "profileHash",
             "type": "string"
           },
           {
@@ -1693,19 +1209,6 @@
     "type": "function"
   },
   {
-    "inputs": [],
-    "name": "idrToken",
-    "outputs": [
-      {
-        "internalType": "contract IDRToken",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
     "inputs": [
       {
         "internalType": "address",
@@ -1776,6 +1279,37 @@
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "memberWithdraw",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_amount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_tenorBulan",
+        "type": "uint256"
+      }
+    ],
+    "name": "openSimpananBerjangka",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "owner",
     "outputs": [
@@ -1796,6 +1330,184 @@
         "internalType": "uint256",
         "name": "",
         "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_loanId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "recordAngsuran",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_user",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_amount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "_isWajib",
+        "type": "bool"
+      }
+    ],
+    "name": "recordDeposit",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_user",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "recordWithdrawal",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "user",
+            "type": "address"
+          },
+          {
+            "internalType": "string",
+            "name": "nama",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "profileHash",
+            "type": "string"
+          },
+          {
+            "internalType": "uint256",
+            "name": "branchId",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct KoperasiSimpanPinjam.RegisterParams",
+        "name": "p",
+        "type": "tuple"
+      }
+    ],
+    "name": "registerMember",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "renounceOwnership",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_loanId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_newTenor",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_newTotal",
+        "type": "uint256"
+      }
+    ],
+    "name": "restrukturPinjaman",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_percentage",
+        "type": "uint256"
+      }
+    ],
+    "name": "rilisBagiHasil",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_totalAmountToDistribute",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_totalSimpananSnapshot",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_startIndex",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_count",
+        "type": "uint256"
+      }
+    ],
+    "name": "rilisBagiHasilBatch",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "saldoIDR",
+    "outputs": [
+      {
+        "internalType": "contract SaldoIDR",
+        "name": "",
+        "type": "address"
       }
     ],
     "stateMutability": "view",
@@ -1867,6 +1579,84 @@
   {
     "inputs": [
       {
+        "internalType": "uint256",
+        "name": "_persenTahunan",
+        "type": "uint256"
+      }
+    ],
+    "name": "setBungaPinjaman",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_persenTahunan",
+        "type": "uint256"
+      }
+    ],
+    "name": "setBungaSimpanan",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_permil",
+        "type": "uint256"
+      }
+    ],
+    "name": "setDendaHarian",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bool",
+        "name": "_useIPFS",
+        "type": "bool"
+      }
+    ],
+    "name": "setStorageMode",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_loanId",
+        "type": "uint256"
+      }
+    ],
+    "name": "setujuiPinjaman",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_admin",
+        "type": "address"
+      }
+    ],
+    "name": "tambahPengurus",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "address",
         "name": "",
         "type": "address"
@@ -1881,6 +1671,24 @@
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_loanId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "string",
+        "name": "_alasan",
+        "type": "string"
+      }
+    ],
+    "name": "tolakPinjaman",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
@@ -1904,6 +1712,164 @@
         "internalType": "uint256",
         "name": "",
         "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address"
+      }
+    ],
+    "name": "transferOwnership",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_member",
+        "type": "address"
+      }
+    ],
+    "name": "tutupKeanggotaan",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_loanId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "enum KoperasiSimpanPinjam.Kolektibilitas",
+        "name": "_status",
+        "type": "uint8"
+      }
+    ],
+    "name": "updateCollectibilityStatus",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "bool",
+            "name": "autoColl",
+            "type": "bool"
+          },
+          {
+            "internalType": "bool",
+            "name": "multiBranch",
+            "type": "bool"
+          },
+          {
+            "internalType": "bool",
+            "name": "deductUpfront",
+            "type": "bool"
+          },
+          {
+            "internalType": "bool",
+            "name": "closePeriod",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint256",
+            "name": "pokok",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "adm",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "minSaldo",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "feeAdmin",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "feeProvisi",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "feeResiko",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct KoperasiSimpanPinjam.SettingsParams",
+        "name": "p",
+        "type": "tuple"
+      }
+    ],
+    "name": "updateGlobalSettings",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_newBalance",
+        "type": "uint256"
+      }
+    ],
+    "name": "updateLiquidityPool",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_user",
+        "type": "address"
+      },
+      {
+        "internalType": "string",
+        "name": "_nama",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "_profileHash",
+        "type": "string"
+      }
+    ],
+    "name": "updateMemberProfile",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "useIPFSStorage",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
       }
     ],
     "stateMutability": "view",

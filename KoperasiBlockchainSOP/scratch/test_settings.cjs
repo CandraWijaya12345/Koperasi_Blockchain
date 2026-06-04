@@ -2,7 +2,7 @@ const { ethers } = require('ethers');
 const fs = require('fs');
 
 const RPC_URL = 'https://rpc-amoy.polygon.technology/';
-const CONTRACT_ADDRESS = '0xe90dD66F48dE541afc3a5B756d8058021F5Cf0ED';
+const CONTRACT_ADDRESS = '0x3BE9a134d553De9841f9FB116FE6B290c78C95d6';
 
 const ABI = JSON.parse(fs.readFileSync('./src/abi/koperasisimpanpinjambaru.json', 'utf8'));
 

@@ -2,11 +2,11 @@
 import React from 'react';
 import { cardStyles as styles } from '../styles/cards';
 import { layoutStyles } from '../styles/layout';
-import { formatCurrency, formatToken } from '../utils/format';
+import { formatCurrency, formatrupiah } from '../utils/format';
 
 const Stats = ({
   anggotaData,
-  idrtBalance,
+  idrBalance,
   totalSimpanan,
   pinjamanAktif,
   pendingLoanUser,
@@ -21,11 +21,11 @@ const Stats = ({
     if (pinjamanAktif) {
       const sisa =
         pinjamanAktif.jumlahHarusDikembalikan - pinjamanAktif.sudahDibayar;
-      value = `Aktif • Sisa ${formatCurrency(formatToken(sisa))}`;
+      value = `Aktif • Sisa ${formatCurrency(formatrupiah(sisa))}`;
       extra = `ID #${Number(pinjamanAktif.id)}`;
     } else if (pendingLoanUser) {
       value = `Menunggu persetujuan • ${formatCurrency(
-        formatToken(pendingLoanUser.args.jumlah)
+        formatrupiah(pendingLoanUser.args.jumlah)
       )}`;
       extra = `ID #${Number(pendingLoanUser.args.id)}`;
     }
@@ -61,7 +61,7 @@ const Stats = ({
           <div>
             <div style={styles.statLabel}>Saldo Wallet</div>
             <div style={styles.statValue}>
-              {formatCurrency(idrtBalance)}
+              {formatCurrency(idrBalance)}
             </div>
           </div>
         </div>

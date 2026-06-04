@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { formatCurrency } from '../../utils/format';
 import InlineMessage from '../InlineMessage';
-import { TOKEN_ADDRESS } from '../../utils/constants';
+import { RUPIAH_ADDRESS } from '../../utils/constants';
 
 const FundManagement = ({ stats, onWithdraw, onAddLiquidity, onMint, onSync, isLoading }) => {
     const [amount, setAmount] = useState('');
@@ -26,11 +26,11 @@ const FundManagement = ({ stats, onWithdraw, onAddLiquidity, onMint, onSync, isL
             setIsMintError(true);
             return;
         }
-        setMintMsg('Memproses pengiriman token...');
+        setMintMsg('Memproses pengiriman rupiah...');
         setIsMintError(false);
         try {
             await onMint(mintToAddr, mintAmount, (m) => setMintMsg(m));
-            setMintMsg('Berhasil mengirim Token!');
+            setMintMsg('Berhasil mengirim rupiah!');
             setMintAmount('');
             setMintToAddr('');
         } catch (err) {
@@ -46,7 +46,7 @@ const FundManagement = ({ stats, onWithdraw, onAddLiquidity, onMint, onSync, isL
         try {
             setMsg('Memproses penarikan...');
             setIsError(false);
-            await onWithdraw(TOKEN_ADDRESS, amount, (m) => setMsg(m));
+            await onWithdraw(RUPIAH_ADDRESS, amount, (m) => setMsg(m));
             setMsg('Penarikan dana berhasil!');
             setAmount('');
         } catch (err) {
@@ -123,7 +123,7 @@ const FundManagement = ({ stats, onWithdraw, onAddLiquidity, onMint, onSync, isL
                                     {stats.adminPolBalance || '0'} POL
                                 </p>
                                 <p style={{ fontSize: '0.75rem', color: Number(stats.adminPolBalance) < 0.05 ? '#dc2626' : '#94a3b8', fontWeight: Number(stats.adminPolBalance) < 0.05 ? '600' : 'normal' }}>
-                                    {Number(stats.adminPolBalance) < 0.05 ? '⚠️ SALDO KRITIS (Segera Top-up)' : 'Native token for gas fees'}
+                                    {Number(stats.adminPolBalance) < 0.05 ? '⚠️ SALDO KRITIS (Segera Top-up)' : 'Native rupiah for gas fees'}
                                 </p>
                             </div>
                         </div>

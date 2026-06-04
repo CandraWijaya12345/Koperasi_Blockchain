@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { formatToken, formatCurrency } from '../../utils/format';
+import { formatrupiah, formatCurrency } from '../../utils/format';
 import { KOPERASI_CONTRACT_ADDRESS } from '../../utils/constants';
 import HistoryList from '../HistoryList';
 
@@ -57,21 +57,51 @@ const MemberDetailModal = ({ member, onClose, allLogs, onCloseMembership }) => {
   const [localLoading, setLocalLoading] = React.useState(false);
   const [showConfirm, setShowConfirm] = React.useState(false);
 
-  // [FIX] Filter logs specifically for this member using identical logic to AdminHistory
+  const [ipfsData, setIpfsData] = React.useState(null);
+  const [ipfsLoading, setIpfsLoading] = React.useState(false);
+
+  const getPhotoUrl = (photoHash) => {
+    if (!photoHash) return '';
+    if (photoHash.startsWith('http')) return photoHash;
+    return `http://localhost:5000/api/ipfs/photo/${member.profileHash}/${member.address}`;
+  };
+
+  React.useEffect(() => {
+    if (member.profileHash && !ipfsData) {
+      const fetchIpfsData = async () => {
+        setIpfsLoading(true);
+        try {
+          const userAddress = String(member.address).toLowerCase();
+          const res = await fetch(`http://localhost:5000/api/ipfs/metadata/${member.profileHash}/${userAddress}`);
+          if (res.ok) {
+            const data = await res.json();
+            setIpfsData(data);
+            setIpfsLoading(false);
+            return;
+          }
+          
+          // Fallback
+          setIpfsData({
+            photoHash: `ktp_${userAddress}`
+          });
+        } catch (e) {
+          console.error("Gagal ambil data IPFS:", e);
+          const userAddress = String(member.address).toLowerCase();
+          setIpfsData({
+            photoHash: `ktp_${userAddress}`
+          });
+        }
+        setIpfsLoading(false);
+      };
+      fetchIpfsData();
+    }
+  }, [member.profileHash]);
+
+  // [FIX] Filter logs khusus member ini
   const userLogs = (allLogs || []).filter(log => {
       if (!log || !log.args) return false;
       const term = String(member.address).toLowerCase();
-      
-      // Look for the address in any relevant argument (user, peminjam, etc.)
-      const addressString = String(
-        log.args?.user || 
-        log.args?.peminjam || 
-        log.args?.anggota || 
-        log.args?.[0] || 
-        log.args?.[1] || 
-        ''
-      ).toLowerCase();
-      
+      const addressString = String(log.args?.user || log.args?.peminjam || log.args?.[0] || '').toLowerCase();
       return addressString === term;
   });
 
@@ -101,16 +131,69 @@ const MemberDetailModal = ({ member, onClose, allLogs, onCloseMembership }) => {
           <div style={modalStyles.statsGrid}>
             <div style={modalStyles.statCard}>
               <div style={modalStyles.statLabel}>Simpanan Pokok</div>
-              <div style={modalStyles.statValue}>{formatCurrency(formatToken(member.sPokok))}</div>
+              <div style={modalStyles.statValue}>{formatCurrency(formatrupiah(member.sPokok))}</div>
             </div>
             <div style={modalStyles.statCard}>
               <div style={modalStyles.statLabel}>Simpanan Wajib</div>
-              <div style={modalStyles.statValue}>{formatCurrency(formatToken(member.sWajib))}</div>
+              <div style={modalStyles.statValue}>{formatCurrency(formatrupiah(member.sWajib))}</div>
             </div>
             <div style={modalStyles.statCard}>
               <div style={modalStyles.statLabel}>Simpanan Sukarela</div>
-              <div style={modalStyles.statValue}>{formatCurrency(formatToken(member.simpananSukarela || 0n))}</div>
+              <div style={modalStyles.statValue}>{formatCurrency(formatrupiah(member.simpananSukarela || 0n))}</div>
             </div>
+            <div style={{ ...modalStyles.statCard, border: (member.tagihanWajib || 0n) > 0n ? '1px solid #fee2e2' : '1px solid #f1f5f9', backgroundColor: (member.tagihanWajib || 0n) > 0n ? '#fef2f2' : '#f8fafc' }}>
+              <div style={{ ...modalStyles.statLabel, color: (member.tagihanWajib || 0n) > 0n ? '#991b1b' : '#64748b' }}>Tagihan Wajib (Unpaid)</div>
+              <div style={{ ...modalStyles.statValue, color: (member.tagihanWajib || 0n) > 0n ? '#dc2626' : '#1e293b' }}>{formatCurrency(formatrupiah(member.tagihanWajib || 0n))}</div>
+            </div>
+          </div>
+
+          {/* [BARU] Informasi Identitas dari IPFS */}
+          <div style={{ marginTop: '24px', backgroundColor: '#f8fafc', padding: '20px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+            <h4 style={{ fontSize: '0.85rem', fontWeight: '800', color: '#1e40af', marginBottom: '16px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+              Identitas Terverifikasi (IPFS)
+            </h4>
+            
+            {ipfsLoading ? (
+              <p style={{ fontSize: '0.875rem', color: '#64748b' }}>Memuat data dari IPFS...</p>
+            ) : ipfsData ? (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div>
+                    <div style={modalStyles.statLabel}>Nomor KTP (NIK)</div>
+                    <div style={{ ...modalStyles.statValue, fontSize: '0.9rem' }}>{ipfsData.noKTP || '-'}</div>
+                  </div>
+                  <div>
+                    <div style={modalStyles.statLabel}>WhatsApp / HP</div>
+                    <div style={{ ...modalStyles.statValue, fontSize: '0.9rem' }}>{ipfsData.noHP || '-'}</div>
+                  </div>
+                  <div>
+                    <div style={modalStyles.statLabel}>Alamat Lengkap</div>
+                    <div style={{ ...modalStyles.statValue, fontSize: '0.85rem', fontWeight: '500', lineHeight: '1.4' }}>{ipfsData.alamat || '-'}</div>
+                  </div>
+                </div>
+                <div>
+                  <div style={modalStyles.statLabel}>Foto KTP</div>
+                  {ipfsData.photoHash ? (
+                    <div 
+                      style={{ cursor: 'pointer', position: 'relative' }}
+                      onClick={() => window.open(getPhotoUrl(ipfsData.photoHash), '_blank')}
+                    >
+                      <img 
+                        src={getPhotoUrl(ipfsData.photoHash)} 
+                        alt="KTP" 
+                        style={{ width: '100%', borderRadius: '8px', border: '1px solid #cbd5e1' }} 
+                      />
+                      <div style={{ position: 'absolute', bottom: '4px', right: '4px', backgroundColor: 'rgba(0,0,0,0.5)', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Klik Perbesar</div>
+                    </div>
+                  ) : (
+                    <div style={{ height: '80px', backgroundColor: '#f1f5f9', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', color: '#94a3b8' }}>Tidak ada foto</div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p style={{ fontSize: '0.875rem', color: '#94a3b8' }}>Data identitas tidak ditemukan atau belum bermigrasi ke IPFS.</p>
+            )}
           </div>
 
           <div style={{ marginTop: '28px' }}>
@@ -144,7 +227,7 @@ const MemberDetailModal = ({ member, onClose, allLogs, onCloseMembership }) => {
                   gap: '8px'
                 }}
               >
-                <span>⚠️</span> Tutup Keanggotaan (Reset Anggota)
+                  <span>System Action:</span> Tutup Keanggotaan (Reset Anggota)
               </button>
             ) : (
                 <div style={{ backgroundColor: '#fef2f2', padding: '16px', borderRadius: '12px', border: '1px solid #fee2e2' }}>
@@ -225,10 +308,6 @@ const MemberList = ({ members, isLoading, simpananLogs, compact, onCloseMembersh
     navigator.clipboard.writeText(text);
   };
 
-  if (isLoading && (!members || members.length === 0)) {
-    return <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>Memuat data anggota...</div>;
-  }
-
   return (
     <div style={styles.container}>
       {!compact && (
@@ -299,9 +378,18 @@ const MemberList = ({ members, isLoading, simpananLogs, compact, onCloseMembersh
                     <div style={{
                       ...styles.statusBadge,
                       backgroundColor: isPaid ? '#dcfce7' : '#fee2e2',
-                      color: isPaid ? '#166534' : '#991b1b'
+                      color: isPaid ? '#166534' : '#991b1b',
+                      flexDirection: 'column',
+                      alignItems: 'flex-start',
+                      gap: '2px',
+                      padding: '8px 14px'
                     }}>
-                      {isPaid ? 'Lunas' : 'Belum'}
+                      <span style={{ fontSize: '0.75rem' }}>{isPaid ? 'Lunas' : 'Belum Bayar'}</span>
+                      {!isPaid && (
+                        <span style={{ fontSize: '0.7rem', opacity: 0.8 }}>
+                          {formatCurrency(formatrupiah(m.tagihanWajib))}
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td style={styles.td}>
@@ -332,8 +420,8 @@ const MemberList = ({ members, isLoading, simpananLogs, compact, onCloseMembersh
                   </td>
                   {!compact && (
                     <td style={styles.td}>
-                      <div style={styles.amountText}>{formatCurrency(formatToken(totalSimpanan))}</div>
-                      <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Pokok: {formatToken(sPokok)}</div>
+                      <div style={styles.amountText}>{formatCurrency(formatrupiah(totalSimpanan))}</div>
+                      <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Pokok: {formatrupiah(sPokok)}</div>
                     </td>
                   )}
                   <td style={{ ...styles.td, textAlign: 'right' }}>

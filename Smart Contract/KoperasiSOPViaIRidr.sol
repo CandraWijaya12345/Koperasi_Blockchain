@@ -40,7 +40,12 @@ contract KoperasiSimpanPinjam is ReentrancyGuard, Ownable {
         bool terdaftar;
         MemberStatus status;
         string nama;
-        string profileHash;
+        string noHP;
+        string noKTP;
+        string alamat;
+        string jenisKelamin;
+        string pekerjaan;
+        string kontakDarurat;
         uint256 simpananPokok;
         uint256 simpananWajib;
         uint256 simpananSukarela;
@@ -88,7 +93,12 @@ contract KoperasiSimpanPinjam is ReentrancyGuard, Ownable {
     struct RegisterParams {
         address user;
         string nama;
-        string profileHash; 
+        string noHP;
+        string noKTP;
+        string alamat;
+        string gender;
+        string job;
+        string emergency;
         uint256 branchId;
     }
 
@@ -126,9 +136,6 @@ contract KoperasiSimpanPinjam is ReentrancyGuard, Ownable {
     uint256 public profitBelumDibagi;
     uint256 public totalSHUDibagikan;
 
-    bool public useIPFSStorage = false;
-
-    event StorageModeUpdated(address indexed admin, bool useIPFS, uint256 timestamp);
     event AnggotaBaru(address indexed user, string nama, uint256 timestamp);
     event AnggotaRejoin(address indexed user, uint256 timestamp); 
     event DepositTercatat(address indexed user, uint256 jumlah, string jenis, uint256 timestamp);
@@ -199,11 +206,6 @@ contract KoperasiSimpanPinjam is ReentrancyGuard, Ownable {
         emit PengurusDitambahkan(_admin, block.timestamp); 
     }
 
-    function setStorageMode(bool _useIPFS) external hanyaPengurus {
-        useIPFSStorage = _useIPFS;
-        emit StorageModeUpdated(msg.sender, _useIPFS, block.timestamp);
-    }
-
     function updateGlobalSettings(SettingsParams calldata p) external hanyaPengurus {
         settings.autoCollectibility = p.autoColl;
         settings.multiBranchEnabled = p.multiBranch;
@@ -231,44 +233,34 @@ contract KoperasiSimpanPinjam is ReentrancyGuard, Ownable {
 
         m.terdaftar = true;
         m.status = MemberStatus.Active;
-        
-        if (useIPFSStorage) {
-            require(bytes(p.profileHash).length > 0, "IPFS Hash wajib diisi pada mode IPFS");
-            m.nama = "";
-            m.profileHash = p.profileHash;
-        } else {
-            require(bytes(p.nama).length > 0, "Nama wajib diisi pada mode On-Chain");
-            m.nama = p.nama;
-            m.profileHash = p.profileHash;
-        }
-        
+        m.nama = p.nama;
+        m.noHP = p.noHP;
+        m.noKTP = p.noKTP;
+        m.alamat = p.alamat;
+        m.jenisKelamin = p.gender;
+        m.pekerjaan = p.job;
+        m.kontakDarurat = p.emergency;
         m.branchID = settings.multiBranchEnabled ? p.branchId : 0;
+        
         m.simpananPokok = 0; 
 
         if (!isRejoining) {
             listAlamatAnggota.push(p.user);
             jumlahAnggota++;
-            emit AnggotaBaru(p.user, useIPFSStorage ? "IPFS_USER" : p.nama, block.timestamp);
+            emit AnggotaBaru(p.user, p.nama, block.timestamp);
         } else {
             emit AnggotaRejoin(p.user, block.timestamp); 
         }
     }
 
     function updateMemberProfile(
-        address _user, string memory _nama, string memory _profileHash
+        address _user, string memory _nama, string memory _noHP, string memory _alamat, string memory _job
     ) external hanyaPengurus {
         require(dataAnggota[_user].terdaftar, "Anggota tidak terdaftar");
-        
-        if (useIPFSStorage) {
-            require(bytes(_profileHash).length > 0, "IPFS Hash wajib diisi pada mode IPFS");
-            dataAnggota[_user].nama = "";
-            dataAnggota[_user].profileHash = _profileHash;
-        } else {
-            require(bytes(_nama).length > 0, "Nama wajib diisi pada mode On-Chain");
-            dataAnggota[_user].nama = _nama;
-            dataAnggota[_user].profileHash = _profileHash;
-        }
-        
+        dataAnggota[_user].nama = _nama;
+        dataAnggota[_user].noHP = _noHP;
+        dataAnggota[_user].alamat = _alamat;
+        dataAnggota[_user].pekerjaan = _job;
         emit MemberProfileUpdated(_user, "FullProfile", block.timestamp);
     }
 
@@ -340,18 +332,13 @@ contract KoperasiSimpanPinjam is ReentrancyGuard, Ownable {
     }
 
     function generateMonthlyBills(uint256 _nominal) external hanyaPengurus {
-        uint256 activeHumanMembers = 0;
         for (uint i = 0; i < listAlamatAnggota.length; i++) {
             address member = listAlamatAnggota[i];
-            if (member == address(this)) {
-                continue; // Exclude Koperasi Reserve from tagihan wajib
-            }
             if (dataAnggota[member].status == MemberStatus.Active) {
                 tagihanWajib[member] += _nominal;
-                activeHumanMembers++;
             }
         }
-        emit TagihanDibuat(_nominal * activeHumanMembers, block.timestamp);
+        emit TagihanDibuat(_nominal * jumlahAnggota, block.timestamp);
     }
 
     function bayarTagihanWajib(uint256 _amount) external hanyaAnggota openPeriod nonReentrant {

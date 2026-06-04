@@ -17,11 +17,12 @@ import PaymentOverlay from '../components/PaymentOverlay';
 import SuccessModal from '../components/SuccessModal';
 import SimpananBerjangkaForm from '../components/Forms/SimpananBerjangkaForm';
 import VerificationOverlay from '../components/VerificationOverlay';
+import TransactionModal from '../components/TransactionModal';
 
 import { useWallet } from '../hooks/useWallet';
 import { useKoperasi } from '../hooks/useKoperasi';
 import { layoutStyles as layout } from '../styles/layout';
-import { formatCurrency, formatToken } from '../utils/format';
+import { formatCurrency, formatrupiah } from '../utils/format';
 
 
 const WalletIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4" /><path d="M4 6v12a2 2 0 0 0 2 2h14v-4" /><path d="M18 12a2 2 0 0 0-2 2c0 1.1.9 2 2 2h4v-4h-4z" /></svg>;
@@ -50,7 +51,7 @@ const UserPage = () => {
     message,
     isLoading,
     anggotaData,
-    idrtBalance,
+    idrBalance,
     totalSimpanan,
     pinjamanAktif,
     pendingLoanUser,
@@ -81,27 +82,149 @@ const UserPage = () => {
   // [BARU] States for Iframe Payment Modal
   const [activeInvoiceUrl, setActiveInvoiceUrl] = useState(null);
   const [showIframe, setShowIframe] = useState(false);
+  const [activeExternalId, setActiveExternalId] = useState(() => sessionStorage.getItem('activeExternalId') || null);
+
+  // [BARU] States for Transaction Stage Tracking
+  const [txModal, setTxModal] = useState({
+    visible: false,
+    stage: 1,
+    message: '',
+    type: 'xendit',
+    error: null
+  });
+
+  // [NEW] Listen for PAYMENT_SUCCESS_IFRAME message from Xendit redirect iframe
+  useEffect(() => {
+    const handleIframeMessage = (event) => {
+      if (event.data?.type === 'PAYMENT_SUCCESS_IFRAME') {
+        console.log("[Payment] Received PAYMENT_SUCCESS_IFRAME message from child frame.");
+        setShowIframe(false);
+        setActiveInvoiceUrl(null);
+        
+        // Immediately advance to stage 3 (Blockchain verification) in parent window
+        setTxModal(prev => ({
+          ...prev,
+          stage: 3,
+          message: 'Pembayaran terdeteksi! Sedang memverifikasi di blockchain...'
+        }));
+      }
+    };
+    window.addEventListener('message', handleIframeMessage);
+    return () => window.removeEventListener('message', handleIframeMessage);
+  }, []);
 
   // Auto-close Iframe when payment succeeds
   useEffect(() => {
     if (paymentSuccess) {
       setShowIframe(false);
       setActiveInvoiceUrl(null);
+      
+      // Update Modal to Success Stage
+      setTxModal(prev => ({
+        ...prev,
+        stage: 4,
+        message: 'Pembayaran terverifikasi! Saldo Anda telah diperbarui.'
+      }));
     }
   }, [paymentSuccess]);
+
+  // Track stages for Xendit payments
+  useEffect(() => {
+    if (isPaymentLocked && !paymentSuccess && txModal.visible && txModal.type === 'xendit') {
+      if (showIframe) {
+        setTxModal(prev => ({ ...prev, stage: 2, message: 'Menunggu Anda menyelesaikan pembayaran di panel Xendit...' }));
+      } else if (!showIframe && txModal.stage < 3) {
+        // If iframe is closed but still locked, it means we are in verification stage
+        setTxModal(prev => ({ ...prev, stage: 3, message: 'Pembayaran sedang diverifikasi di blockchain. Mohon tunggu...' }));
+      }
+    }
+  }, [isPaymentLocked, paymentSuccess, showIframe, txModal.visible, txModal.type, txModal.stage]);
+
+  // [MITIGASI] Recover state on refresh if locked
+  useEffect(() => {
+    if (isPaymentLocked && !paymentSuccess && !txModal.visible) {
+      setTxModal({
+        visible: true,
+        stage: 3,
+        message: 'Mendeteksi transaksi aktif... Menunggu verifikasi blockchain otomatis.',
+        type: 'xendit'
+      });
+    }
+  }, [isPaymentLocked, paymentSuccess, txModal.visible]);
 
   // Wrappers to handle invoiceUrl from hook
   const handlePaymentTrigger = async (paymentFunc, ...args) => {
     try {
-      const result = await paymentFunc(...args);
+      setTxModal({ visible: true, stage: 1, message: 'Menyiapkan invoice pembayaran...', type: 'xendit', error: null });
+      const result = await paymentFunc(...args, (msg) => setTxModal(prev => ({ ...prev, message: msg })));
       if (result && result.invoiceUrl) {
         setActiveInvoiceUrl(result.invoiceUrl);
+        setActiveExternalId(result.externalId || null);
+        sessionStorage.setItem('activeExternalId', result.externalId || '');
         setShowIframe(true);
       }
       return result;
     } catch (err) {
       console.error("Payment trigger error:", err);
-      throw err; // [FIX] Re-throw so the form can catch and display the specific error
+      // Mitigation: Show error in modal instead of just closing it
+      setTxModal(prev => ({ ...prev, error: err.message || 'Terjadi kesalahan sistem.' }));
+      throw err;
+    }
+  };
+
+  const handleClosePayment = async () => {
+    const extId = activeExternalId || sessionStorage.getItem('activeExternalId');
+    if (extId) {
+      // Show verification stage on the status modal
+      setTxModal({ visible: true, stage: 1, message: 'Memverifikasi status pembayaran terakhir di Xendit...', type: 'xendit', error: null });
+      try {
+        const res = await fetch(`http://localhost:5000/api/payment/verify/${extId}`);
+        const data = await res.json();
+        if (data.success && (data.status === 'PAID' || data.status === 'SETTLED')) {
+          // Payment was actually completed! Advance to blockchain stage
+          console.log("[Close Payment] Verified as PAID. Keeping locked for blockchain confirmation.");
+          setShowIframe(false);
+          setActiveExternalId(null);
+          sessionStorage.removeItem('activeExternalId');
+          setTxModal(prev => ({
+            ...prev,
+            stage: 3,
+            message: 'Pembayaran terdeteksi sukses! Memperbarui data Anda di blockchain...'
+          }));
+          return;
+        }
+      } catch (err) {
+        console.warn("[Close Payment] Verification fetch failed:", err);
+      }
+    }
+    
+    // If not paid (or verification failed/unpaid), we proceed to cancel
+    cancelPayment();
+    setShowIframe(false);
+    setActiveExternalId(null);
+    sessionStorage.removeItem('activeExternalId');
+    setTxModal({ visible: false, stage: 1, message: '', type: 'xendit' });
+  };
+
+  const handleInternalPayment = async (onProgress) => {
+    try {
+      setTxModal({ visible: true, stage: 1, message: 'Menyiapkan data blockchain...', type: 'internal', error: null });
+      const tx = await bayarSimpananWajibInternal((msg) => {
+        // Update stage based on message keywords
+        if (msg.includes('Blockchain')) setTxModal(prev => ({ ...prev, stage: 2, message: msg }));
+        else if (msg.includes('konfirmasi')) setTxModal(prev => ({ ...prev, stage: 2, message: msg }));
+        else setTxModal(prev => ({ ...prev, message: msg }));
+      });
+      
+      setTxModal(prev => ({ ...prev, stage: 3, message: 'Transaksi dikonfirmasi! Memperbarui saldo Anda...' }));
+      await triggerTripleSync();
+      
+      setTxModal(prev => ({ ...prev, stage: 4, message: 'Berhasil! Saldo Simpanan Wajib Anda telah bertambah.' }));
+      return tx;
+    } catch (err) {
+      console.error("Internal payment error:", err);
+      setTxModal(prev => ({ ...prev, error: err.message || 'Gagal memproses transaksi blockchain.' }));
+      throw err;
     }
   };
 
@@ -274,12 +397,54 @@ const UserPage = () => {
         </div>
       )}
 
-      {/* GLOBAL LOADING / SYNCING OVERLAY */}
-      <VerificationOverlay 
-        isVisible={(isPaymentLocked && !showIframe) || isLoading} 
-        message={isPaymentLocked ? "Memverifikasi Pembayaran Anda..." : "Sedang Memproses di Blockchain..."}
-        onCancel={cancelPayment}
-      />
+      {/* GLOBAL SYNCING BANNER (Silent Background Refresh Enabled) */}
+      {isPaymentLocked && !showIframe && (
+        <div style={{
+          background: '#eff6ff',
+          borderBottom: '1px solid #bfdbfe',
+          color: '#1e40af',
+          padding: '12px 24px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          fontSize: '0.9rem',
+          fontWeight: '500',
+          animation: 'fadeIn 0.3s ease-out'
+        }}>
+          <style>{`
+            @keyframes pulseBanner { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.9); } }
+          `}</style>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ 
+              display: 'inline-block',
+              width: '8px',
+              height: '8px',
+              backgroundColor: '#3b82f6',
+              borderRadius: '50%',
+              animation: 'pulseBanner 1.5s infinite'
+            }}></span>
+            <span>Sedang memverifikasi pembayaran Anda di latar belakang... Halaman akan terupdate secara otomatis.</span>
+          </div>
+          <button 
+            onClick={cancelPayment}
+            style={{
+              background: 'transparent',
+              border: '1px solid #3b82f6',
+              color: '#3b82f6',
+              padding: '4px 12px',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontSize: '0.8rem',
+              fontWeight: '600',
+              transition: 'all 0.2s'
+            }}
+            onMouseOver={(e) => { e.target.style.backgroundColor = 'rgba(59, 130, 246, 0.05)'; }}
+            onMouseOut={(e) => { e.target.style.backgroundColor = 'transparent'; }}
+          >
+            Batal / Reset
+          </button>
+        </div>
+      )}
 
       {globalMessage && (
         <div style={layout.messageWrapper}>
@@ -314,7 +479,7 @@ const UserPage = () => {
                   <div>
                     <div style={styles.cardLabel}><WalletIcon /> Saldo Wallet</div>
                     <div style={styles.cardValue}>
-                      {formatCurrency(idrtBalance)}
+                      {formatCurrency(idrBalance)}
                     </div>
                   </div>
                 </div>
@@ -334,20 +499,20 @@ const UserPage = () => {
                     </h4>
                     <div style={styles.breakdownItem}>
                       <span style={styles.breakdownLabel}>Simpanan Pokok</span>
-                      <span style={styles.breakdownValue}>{formatCurrency(formatToken(anggotaData?.simpananPokok || 0))}</span>
+                      <span style={styles.breakdownValue}>{formatCurrency(formatrupiah(anggotaData?.simpananPokok || 0))}</span>
                     </div>
                     <div style={styles.breakdownItem}>
                       <span style={styles.breakdownLabel}>Simpanan Wajib</span>
-                      <span style={styles.breakdownValue}>{formatCurrency(formatToken(anggotaData?.simpananWajib || 0))}</span>
+                      <span style={styles.breakdownValue}>{formatCurrency(formatrupiah(anggotaData?.simpananWajib || 0))}</span>
                     </div>
                     <div style={styles.breakdownItem}>
                       <span style={styles.breakdownLabel}>Simpanan Sukarela</span>
-                      <span style={styles.breakdownValue}>{formatCurrency(formatToken(anggotaData?.simpananSukarela || 0))}</span>
+                      <span style={styles.breakdownValue}>{formatCurrency(formatrupiah(anggotaData?.simpananSukarela || 0))}</span>
                     </div>
                     <div style={{ ...styles.breakdownItem, borderBottom: 'none' }}>
                       <span style={styles.breakdownLabel}>Simpanan Berjangka</span>
                       <span style={{ ...styles.breakdownValue, color: '#16a34a' }}>
-                        {formatCurrency(formatToken(userTimeDeposits.reduce((sum, d) => d.active ? sum + BigInt(d.amount) : sum, 0n)))}
+                        {formatCurrency(formatrupiah(userTimeDeposits.reduce((sum, d) => d.active ? sum + BigInt(d.amount) : sum, 0n)))}
                       </span>
                     </div>
                   </div>
@@ -371,7 +536,7 @@ const UserPage = () => {
                     {pinjamanAktif ? (
                       <>
                         <div style={styles.cardValue}>
-                          {formatCurrency(formatToken(pinjamanAktif.jumlahHarusDikembalikan - pinjamanAktif.sudahDibayar))}
+                          {formatCurrency(formatrupiah(pinjamanAktif.jumlahHarusDikembalikan - pinjamanAktif.sudahDibayar))}
                         </div>
                         <div style={{ fontSize: '0.875rem', color: '#b45309', fontWeight: '600', background: '#fef3c7', padding: '2px 8px', borderRadius: '4px', width: 'fit-content' }}>
                           Sedang Berjalan
@@ -430,51 +595,7 @@ const UserPage = () => {
                 </div>
             )}
 
-            {/* [BARU] UNIVERSAL PAYMENT OVERLAY: Untuk Angsuran/Simpanan yang terjebak loading */}
-            {isPaymentLocked && !isActivating && (
-                <div style={{
-                    position: 'fixed',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                    zIndex: 9999,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    textAlign: 'center',
-                    padding: '24px'
-                }}>
-                    <div style={{ marginBottom: '20px' }}>
-                        <svg className="animate-spin" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                        </svg>
-                    </div>
-                    <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#1e40af', marginBottom: '8px' }}>
-                        Memverifikasi Pembayaran...
-                    </h3>
-                    <p style={{ color: '#64748b', maxWidth: '400px', marginBottom: '24px' }}>
-                        Kami sedang menunggu konfirmasi dari blockchain. Halaman akan terbuka otomatis. 
-                        Jika lebih dari 1 menit tidak berubah, silakan klik tombol di bawah.
-                    </p>
-                    <button 
-                        onClick={cancelPayment}
-                        style={{
-                            background: '#ffffff',
-                            color: '#ef4444',
-                            border: '1px solid #fee2e2',
-                            padding: '12px 24px',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                            fontWeight: '600'
-                        }}
-                    >
-                        Batal & Refresh Manual
-                    </button>
-                </div>
-            )}
+
 
             {(!anggotaData?.terdaftar || anggotaData?.status === 4) && !isLoading && !isActivating && (
               <RegisterForm 
@@ -482,6 +603,7 @@ const UserPage = () => {
                 isLoading={isLoading} 
                 isPaymentLocked={isPaymentLocked}
                 paymentSuccess={paymentSuccess}
+                paymentType={paymentType}
                 userAddress={account}
                 adminConfig={adminConfig}
               />
@@ -499,8 +621,9 @@ const UserPage = () => {
                       isLoading={isLoading}
                       isPaymentLocked={isPaymentLocked}
                       paymentSuccess={paymentSuccess}
+                      paymentType={paymentType}
                       onPay={(...args) => handlePaymentTrigger(setorSimpananWajib, ...args)}
-                      onPayInternal={(...args) => handlePaymentTrigger(bayarSimpananWajibInternal, ...args)}
+                      onPayInternal={handleInternalPayment}
                     />
 
                     <SimpananForm
@@ -508,13 +631,14 @@ const UserPage = () => {
                       isLoading={isLoading}
                       isPaymentLocked={isPaymentLocked}
                       paymentSuccess={paymentSuccess}
+                      paymentType={paymentType}
                     />
 
                     {/* WITHDRAW SECTION */}
                     <div ref={withdrawFormRef}>
                       <WithdrawForm
                         onWithdraw={tarikSimpanan}
-                        maxBalance={formatCurrency(formatToken(anggotaData?.simpananSukarela || 0))}
+                        maxBalance={formatCurrency(formatrupiah(anggotaData?.simpananSukarela || 0))}
                         isLoading={isLoading}
                       />
                     </div>
@@ -525,7 +649,7 @@ const UserPage = () => {
                   <SimpananBerjangkaForm
                     userTimeDeposits={userTimeDeposits}
                     anggotaData={anggotaData}
-                    idrtBalance={idrtBalance}
+                    idrBalance={idrBalance}
                     onOpen={openSimpananBerjangka}
                     onCair={cairkanSimpananBerjangka}
                     isLoading={isLoading}
@@ -542,6 +666,7 @@ const UserPage = () => {
                         isLoading={isLoading}
                         isPaymentLocked={isPaymentLocked}
                         paymentSuccess={paymentSuccess}
+                        paymentType={paymentType}
                         adminConfig={adminConfig}
                       />
                     ) : pendingLoanUser ? (
@@ -577,7 +702,22 @@ const UserPage = () => {
         <p>© 2026 Koperasi Simpan Pinjam Blockchain</p>
       </footer>
 
-      <PaymentOverlay isVisible={isPaymentLocked && !showIframe} />
+      <TransactionModal 
+        isVisible={txModal.visible}
+        stage={txModal.stage}
+        message={txModal.message}
+        type={txModal.type}
+        error={txModal.error}
+        onClose={() => {
+          // If closed during blockchain verification (stage 3), do NOT call cancelPayment so polling and banner can continue in the background.
+          // If closed before stage 3, we release the lock as the user cancelled.
+          if (txModal.stage < 3 && isPaymentLocked) {
+            cancelPayment();
+          }
+          setTxModal(prev => ({ ...prev, visible: false }));
+          setPaymentSuccess(false); // Reset internal flag
+        }}
+      />
       
       {/* SEAMLESS IFRAME MODAL */}
       {showIframe && activeInvoiceUrl && (
@@ -605,13 +745,10 @@ const UserPage = () => {
              }}>
                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                  <div style={{ width: '10px', height: '10px', backgroundColor: '#10b981', borderRadius: '50%', animation: 'pulse 1.5s infinite' }}></div>
-                 <span style={{ fontWeight: '700', color: '#1e293b' }}>Pembayaran Aman Xendit</span>
+                 <span style={{ fontWeight: '700', color: '#1e293b' }}>Xendit Payment Gateway</span>
                </div>
                <button 
-                 onClick={() => {
-                   cancelPayment();
-                   setShowIframe(false);
-                 }}
+                 onClick={handleClosePayment}
                  style={{ 
                    background: '#ef4444', color: 'white', border: 'none', 
                    padding: '6px 16px', borderRadius: '12px', fontWeight: '600',

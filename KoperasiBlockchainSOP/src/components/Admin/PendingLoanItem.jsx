@@ -1,18 +1,12 @@
 // components/Admin/PendingLoanItem.jsx
 import React from 'react';
 import { cardStyles as styles } from '../../styles/cards';
-import { formatCurrency, formatToken } from '../../utils/format';
+import { formatCurrency, formatrupiah } from '../../utils/format';
 
 const shortText = (text, start = 6, end = 4) => {
   if (!text) return '-';
   return `${text.slice(0, start)}…${text.slice(-end)}`;
 };
-
-const LoadingSpinner = ({ size = 16, color = "currentColor" }) => (
-  <svg className="animate-spin" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-  </svg>
-);
 
 const PendingLoanItem = ({ log, loan, onApprove, onReject, onApproveSurvey, onApproveCommittee, loading, onNotify, systemStatus, adminConfig }) => {
   const data = loan || log;
@@ -28,7 +22,7 @@ const PendingLoanItem = ({ log, loan, onApprove, onReject, onApproveSurvey, onAp
   const status = Number(data?.status ?? 0);
   const id = Number(loan?.id ?? args?.id ?? 0);
   const peminjam = loan?.peminjam ?? args?.peminjam ?? args?.anggota ?? args?.[1];
-  const jumlah = formatCurrency(formatToken(loan?.jumlahPinjaman ?? args?.jumlah ?? 0));
+  const jumlah = formatCurrency(formatrupiah(loan?.jumlahPinjaman ?? args?.jumlah ?? 0));
   const ts = loan?.extractedTimestamp ?? data?.extractedTimestamp ?? Number(args?.waktu) ?? 0;
   const waktu = ts ? new Date(ts * 1000).toLocaleString('id-ID') : 'Baru saja';
 
@@ -132,8 +126,8 @@ const PendingLoanItem = ({ log, loan, onApprove, onReject, onApproveSurvey, onAp
                 <div style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: '600' }}>DANA DITERIMA</div>
                 <div style={{ fontSize: '0.9rem', fontWeight: '800', color: '#166534' }}>
                     {adminConfig?.deductUpfront ? 
-                        formatCurrency(formatToken(loan?.jumlahPinjaman ?? args?.jumlah ?? 0n) - (adminConfig?.feeAdmin || 0) - (formatToken(loan?.jumlahPinjaman ?? args?.jumlah ?? 0n) * (adminConfig?.feeProvisi || 0) / 100))
-                        : formatCurrency(formatToken(loan?.jumlahPinjaman ?? args?.jumlah ?? 0n))}
+                        formatCurrency(formatrupiah(loan?.jumlahPinjaman ?? args?.jumlah ?? 0n) - (adminConfig?.feeAdmin || 0) - (formatrupiah(loan?.jumlahPinjaman ?? args?.jumlah ?? 0n) * (adminConfig?.feeProvisi || 0) / 100))
+                        : formatCurrency(formatrupiah(loan?.jumlahPinjaman ?? args?.jumlah ?? 0n))}
                 </div>
             </div>
             <div>
@@ -146,6 +140,12 @@ const PendingLoanItem = ({ log, loan, onApprove, onReject, onApproveSurvey, onAp
       </div>
 
       <div style={{ marginTop: '10px' }}>
+        {systemStatus?.tunnel !== 'ONLINE' && (
+          <div style={{ fontSize: '0.75rem', color: '#ea580c', background: '#fffbeb', border: '1px solid #fde68a', padding: '10px 14px', borderRadius: '10px', display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '14px' }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: '2px' }}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
+            <span><b>Peringatan Tunnel Offline:</b> Proses pencairan ke Xendit tetap berjalan, namun sinkronisasi otomatis status transaksi akan tertunda hingga tunnel aktif.</span>
+          </div>
+        )}
         {confirmAction ? (
           <div style={{ background: confirmAction === 'approve' ? '#f0fdf4' : '#fef2f2', border: `1px solid ${confirmAction === 'approve' ? '#22c55e' : '#ef4444'}`, borderRadius: '12px', padding: '16px' }}>
             <p style={{ fontWeight: '700', marginBottom: '12px', color: confirmAction === 'approve' ? '#166534' : '#991b1b' }}>
@@ -199,12 +199,7 @@ const PendingLoanItem = ({ log, loan, onApprove, onReject, onApproveSurvey, onAp
                   opacity: isActing ? 0.7 : 1
                 }}
               >
-                {isActing ? (
-                  <>
-                    <LoadingSpinner size={18} />
-                    <span>Memproses...</span>
-                  </>
-                ) : 'Konfirmasi'}
+                {isActing ? 'Memproses...' : 'Konfirmasi'}
               </button>
             </div>
           </div>
@@ -212,15 +207,15 @@ const PendingLoanItem = ({ log, loan, onApprove, onReject, onApproveSurvey, onAp
           <div style={{ display: 'flex', gap: '12px' }}>
             <button 
               onClick={() => setConfirmAction('approve')}
-              disabled={isActing || systemStatus?.xendit !== 'ONLINE' || systemStatus?.tunnel !== 'ONLINE'}
+              disabled={isActing || systemStatus?.xendit !== 'ONLINE'}
               title={
                 systemStatus?.xendit !== 'ONLINE' ? "Xendit API Offline" : 
-                systemStatus?.tunnel !== 'ONLINE' ? "NGrok Tunnel Offline - Harap nyalakan NGrok" : 
+                systemStatus?.tunnel !== 'ONLINE' ? "Peringatan: Tunnel Offline (Callback otomatis nonaktif)" : 
                 ""
               }
               style={{ 
                 flex: 2, 
-                background: (systemStatus?.xendit === 'ONLINE' && systemStatus?.tunnel === 'ONLINE') 
+                background: (systemStatus?.xendit === 'ONLINE') 
                   ? (status === 2 ? '#10b981' : '#2563eb') 
                   : '#94a3b8', 
                 color: '#fff', 
@@ -228,12 +223,11 @@ const PendingLoanItem = ({ log, loan, onApprove, onReject, onApproveSurvey, onAp
                 padding: '12px', 
                 borderRadius: '10px', 
                 fontWeight: '700', 
-                cursor: (isActing || systemStatus?.xendit !== 'ONLINE' || systemStatus?.tunnel !== 'ONLINE') ? 'not-allowed' : 'pointer',
-                opacity: (isActing || systemStatus?.xendit !== 'ONLINE' || systemStatus?.tunnel !== 'ONLINE') ? 0.6 : 1
+                cursor: (isActing || systemStatus?.xendit !== 'ONLINE') ? 'not-allowed' : 'pointer',
+                opacity: (isActing || systemStatus?.xendit !== 'ONLINE') ? 0.6 : 1
               }}
             >
-              {systemStatus?.tunnel !== 'ONLINE' ? 'Tunnel Offline' : 
-               systemStatus?.xendit !== 'ONLINE' ? 'Xendit Offline' : 
+              {systemStatus?.xendit !== 'ONLINE' ? 'Xendit Offline' : 
                getButtonText()}
             </button>
             <button 

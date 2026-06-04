@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWallet } from '../hooks/useWallet';
 import { useKoperasi } from '../hooks/useKoperasi';
-import { formatToken } from '../utils/format';
+import { formatrupiah } from '../utils/format';
 import { layoutStyles as layout } from '../styles/layout';
 import Navbar from '../components/Navbar';
 
@@ -277,7 +277,7 @@ const LoanDetailPage = () => {
                                     <span>Total Tagihan</span>
                                 </div>
                                 <div style={styles.statValue}>
-                                    {formatToken(pinjamanAktif.jumlahHarusDikembalikan)}
+                                    {formatrupiah(pinjamanAktif.jumlahHarusDikembalikan)}
                                     <span style={styles.statValueSub}></span>
                                 </div>
                             </div>
@@ -288,7 +288,7 @@ const LoanDetailPage = () => {
                                     <span>Sisa Kewajiban</span>
                                 </div>
                                 <div style={{ ...styles.statValue, color: pinjamanAktif.lunas ? '#16a34a' : '#ef4444' }}>
-                                    {formatToken(debt)}
+                                    {formatrupiah(debt)}
                                     <span style={styles.statValueSub}></span>
                                 </div>
                             </div>
@@ -301,7 +301,7 @@ const LoanDetailPage = () => {
                                     <span>Pokok Pinjaman</span>
                                 </div>
                                 <div style={{ ...styles.statValue, fontSize: '1.1rem' }}>
-                                    {formatToken(pinjamanAktif.jumlahPinjaman)}
+                                    {formatrupiah(pinjamanAktif.jumlahPinjaman)}
                                 </div>
                             </div>
                             <div style={{ ...styles.statItem, paddingLeft: '2rem' }}>
@@ -309,7 +309,7 @@ const LoanDetailPage = () => {
                                     <span>Sudah Dibayar</span>
                                 </div>
                                 <div style={{ ...styles.statValue, fontSize: '1.1rem', color: '#16a34a' }}>
-                                    {formatToken(pinjamanAktif.sudahDibayar)}
+                                    {formatrupiah(pinjamanAktif.sudahDibayar)}
                                 </div>
                             </div>
                         </div>

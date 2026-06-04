@@ -2,6 +2,7 @@ import React from 'react';
 import { layoutStyles as layout } from '../styles/layout';
 import { useWallet } from '../hooks/useWallet';
 import { useKoperasi } from '../hooks/useKoperasi';
+import { KOPERASI_CONTRACT_ADDRESS } from '../utils/constants';
 
 import AdminPanel from '../components/Admin/AdminPanel';
 import MemberList from '../components/Admin/MemberList';
@@ -12,6 +13,7 @@ import FundManagement from '../components/Admin/FundManagement';
 import AdminHistory from '../components/Admin/AdminHistory';
 import GovernancePanel from '../components/Admin/GovernancePanel';
 import { useState, useEffect } from 'react';
+import VerificationOverlay from '../components/VerificationOverlay';
 
 // --- ICONS (Simple, Clean SVGs) ---
 const DashboardIcon = ({ active }) => (
@@ -52,9 +54,10 @@ const AdminPage = () => {
     adminConfig,
     setujuiPinjaman,
     memberList,
-    mintToken,
+    mintrupiah,
     tolakPinjaman,
     updateGlobalSettings,
+    changeStorageMode,
     tambahLikuiditas,
     adminStats,
     shuHistory,
@@ -75,6 +78,70 @@ const AdminPage = () => {
 
   const [activeTab, setActiveTab] = useState('dashboard');
   const globalMessage = walletError || message;
+
+  // --- Transaction Overlay for Admin Actions ---
+  const [txOverlay, setTxOverlay] = useState({
+    visible: false,
+    message: '',
+    description: ''
+  });
+
+  const wrapAdminAction = (actionFn, defaultMessage, customDescription) => {
+    return async (...args) => {
+      setTxOverlay({
+        visible: true,
+        message: defaultMessage,
+        description: customDescription || 'Sistem sedang memproses transaksi admin di blockchain. Mohon jangan menutup halaman ini.'
+      });
+
+      let argsToPass = [...args];
+      let originalCallback = null;
+
+      // Look for any callback function passed in args
+      const callbackIndex = argsToPass.findIndex(arg => typeof arg === 'function');
+      if (callbackIndex !== -1) {
+        originalCallback = argsToPass[callbackIndex];
+        argsToPass[callbackIndex] = (msg) => {
+          setTxOverlay(prev => ({ ...prev, message: msg }));
+          if (originalCallback) originalCallback(msg);
+        };
+      } else {
+        // If no callback, append our own to update status in real-time
+        argsToPass.push((msg) => {
+          setTxOverlay(prev => ({ ...prev, message: msg }));
+        });
+      }
+
+      try {
+        const result = await actionFn(...argsToPass);
+        setTxOverlay(prev => ({
+          ...prev,
+          message: 'Transaksi Berhasil!',
+          description: 'Halaman akan memperbarui data secara otomatis dalam beberapa saat.'
+        }));
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        return result;
+      } catch (err) {
+        console.error("Action failed:", err);
+        throw err;
+      } finally {
+        setTxOverlay({ visible: false, message: '', description: '' });
+      }
+    };
+  };
+
+  const wrappedSetujuiPinjaman = wrapAdminAction(setujuiPinjaman, 'Memproses persetujuan pinjaman...', 'Mencairkan dana pinjaman ke rekening anggota via Xendit.');
+  const wrappedTolakPinjaman = wrapAdminAction(tolakPinjaman, 'Memproses penolakan pinjaman...', 'Menolak pengajuan pinjaman anggota.');
+  const wrappedApproveSurvey = wrapAdminAction(approveSurvey, 'Memproses persetujuan survey...', 'Menyimpan hasil survey ke dalam blockchain.');
+  const wrappedApproveCommittee = wrapAdminAction(approveCommittee, 'Memproses persetujuan komite...', 'Menyetujui kelayakan pinjaman oleh komite.');
+  const wrappedMintRupiah = wrapAdminAction(mintrupiah, 'Memproses pencetakan Rupiah...', 'Mencetak token Rupiah baru ke wallet tujuan.');
+  const wrappedTambahLikuiditas = wrapAdminAction(tambahLikuiditas, 'Menambahkan likuiditas...', 'Mentransfer likuiditas ke pool Koperasi.');
+  const wrappedUpdateSettings = wrapAdminAction(updateGlobalSettings, 'Mengubah pengaturan...', 'Menyimpan konfigurasi baru ke blockchain.');
+  const wrappedChangeStorageMode = wrapAdminAction(changeStorageMode, 'Mengubah mode penyimpanan...', 'Memperbarui mode penyimpanan data anggota.');
+  const wrappedSyncLiquidity = wrapAdminAction(syncLiquidity, 'Menyelaraskan likuiditas...', 'Sinkronisasi saldo kas nyata dengan kas blockchain.');
+  const wrappedGenerateMonthlyBills = wrapAdminAction(generateMonthlyBills, 'Menghasilkan tagihan bulanan...', 'Membuat tagihan iuran wajib untuk semua anggota.');
+  const wrappedReleaseProfitSharing = wrapAdminAction(releaseProfitSharing, 'Membagikan SHU...', 'Mendistribusikan Sisa Hasil Usaha kepada anggota.');
+  const wrappedCloseMembership = wrapAdminAction(closeMembership, 'Menutup keanggotaan...', 'Menonaktifkan keanggotaan dan mengembalikan simpanan.');
 
   // Auto-fetch logs when entering Riwayat tab
   useEffect(() => {
@@ -264,14 +331,15 @@ const AdminPage = () => {
 
           {globalMessage && (
             <div style={styles.messageBanner}>
-              <span style={{ fontSize: '1.1rem' }}>ℹ️</span>
+              <span style={{ fontSize: '0.65rem', fontWeight: '800', textTransform: 'uppercase', padding: '2px 6px', background: '#dbeafe', color: '#1e40af', borderRadius: '4px', marginRight: '8px' }}>Info</span>
               <span style={{ fontSize: '0.9rem' }}>{globalMessage}</span>
             </div>
           )}
 
           {adminStats.adminPolBalance && Number(adminStats.adminPolBalance) < 0.1 && (
             <div style={{ ...styles.messageBanner, background: '#fff7ed', color: '#c2410c', borderColor: '#fdba74', marginBottom: '10px' }}>
-              <span>⚠️ Saldo POL Rendah: {adminStats.adminPolBalance} POL</span>
+              <span style={{ fontSize: '0.65rem', fontWeight: '800', textTransform: 'uppercase', padding: '2px 6px', background: '#ffedd5', color: '#9a3412', borderRadius: '4px', marginRight: '8px' }}>Warning</span>
+              <span style={{ fontSize: '0.9rem' }}>Saldo POL Rendah: {adminStats.adminPolBalance} POL</span>
             </div>
           )}
 
@@ -285,23 +353,24 @@ const AdminPage = () => {
                 <section style={styles.statsRow}>
                   <StatCard label="Pending Loans" value={allLoans.pending ? allLoans.pending.length : 0} trend="Requires Action" urgent />
                   <StatCard label="Active Loans" value={allLoans.active ? allLoans.active.length : 0} trend="Performing" />
-                  <StatCard label="Total Members" value={memberList.length} trend="Active users" />
+                  <StatCard label="Total Members" value={(memberList || []).filter(m => m.address.toLowerCase() !== KOPERASI_CONTRACT_ADDRESS.toLowerCase()).length} trend="Active users" />
                   <StatCard label="Interest (Simpanan)" value={`${adminConfig.bunga}%`} trend="Annual" />
                 </section>
                 <div style={styles.mainGrid}>
                   <div style={styles.bigCard}>
                     <h2 style={{ ...styles.cardTitle, marginBottom: '20px' }}>Recent Members</h2>
-                    <MemberList members={memberList.slice(0, 5)} onMint={mintToken} isLoading={isLoading} simpananLogs={allGlobalLogs} compact={true} onCloseMembership={closeMembership} />
+                    <MemberList members={(memberList || []).filter(m => m.address.toLowerCase() !== KOPERASI_CONTRACT_ADDRESS.toLowerCase()).slice(0, 5)} onMint={wrappedMintRupiah} isLoading={isLoading} simpananLogs={allGlobalLogs} compact={true} onCloseMembership={wrappedCloseMembership} />
                   </div>
                   <div style={styles.sideCard}>
                     <AdminPanel 
                       pendingLoans={allLoans.pending ? allLoans.pending.slice(0, 3) : []} 
-                      onApprove={setujuiPinjaman} 
-                      onReject={tolakPinjaman} 
-                      onApproveSurvey={approveSurvey}
-                      onApproveCommittee={approveCommittee}
+                      onApprove={wrappedSetujuiPinjaman} 
+                      onReject={wrappedTolakPinjaman} 
+                      onApproveSurvey={wrappedApproveSurvey}
+                      onApproveCommittee={wrappedApproveCommittee}
                       isLoading={isLoading} 
                       adminConfig={adminConfig}
+                      systemStatus={systemStatus}
                     />
                   </div>
                 </div>
@@ -311,7 +380,7 @@ const AdminPage = () => {
             {activeTab === 'anggota' && (
               <div style={styles.pageCard}>
                 <h2 style={styles.pageTitle}>Member Management</h2>
-                <MemberList members={memberList} isLoading={isLoading} simpananLogs={allGlobalLogs} onMint={mintToken} onCloseMembership={closeMembership} />
+                <MemberList members={memberList} isLoading={isLoading} simpananLogs={allGlobalLogs} onMint={wrappedMintRupiah} onCloseMembership={wrappedCloseMembership} />
               </div>
             )}
 
@@ -319,10 +388,10 @@ const AdminPage = () => {
               <div style={styles.pageCard}>
                 <LoanManagement 
                   allLoans={allLoans} 
-                  onApprove={setujuiPinjaman} 
-                  onReject={tolakPinjaman} 
-                  onApproveSurvey={approveSurvey} 
-                  onApproveCommittee={approveCommittee} 
+                  onApprove={wrappedSetujuiPinjaman} 
+                  onReject={wrappedTolakPinjaman} 
+                  onApproveSurvey={wrappedApproveSurvey} 
+                  onApproveCommittee={wrappedApproveCommittee} 
                   isLoading={isLoading} 
                   systemStatus={systemStatus}
                   adminConfig={adminConfig}
@@ -336,9 +405,9 @@ const AdminPage = () => {
                   stats={adminStats} 
                   config={adminConfig}
                   members={memberList}
-                  onSync={syncLiquidity} 
-                  onGenerateBills={generateMonthlyBills} 
-                  onReleaseSharing={releaseProfitSharing} 
+                  onSync={wrappedSyncLiquidity} 
+                  onGenerateBills={wrappedGenerateMonthlyBills} 
+                  onReleaseSharing={wrappedReleaseProfitSharing} 
                   isLoading={isLoading} 
                 />
               </div>
@@ -347,7 +416,7 @@ const AdminPage = () => {
             {activeTab === 'likuiditas' && (
               <div style={styles.pageCard}>
                 <h2 style={styles.pageTitle}>Financial & Liquidity</h2>
-                <FundManagement stats={adminStats} onWithdraw={emergencyWithdraw} onAddLiquidity={tambahLikuiditas} onSync={syncLiquidity} isLoading={isLoading} />
+                <FundManagement stats={adminStats} onWithdraw={emergencyWithdraw} onAddLiquidity={wrappedTambahLikuiditas} onSync={wrappedSyncLiquidity} isLoading={isLoading} />
               </div>
             )}
 
@@ -362,7 +431,8 @@ const AdminPage = () => {
               <div style={styles.pageCard}>
                 <AdminSettings 
                   config={adminConfig} 
-                  onUpdate={updateGlobalSettings} 
+                  onUpdate={wrappedUpdateSettings} 
+                  onChangeStorageMode={wrappedChangeStorageMode}
                   isLoading={isLoading} 
                   systemStatus={systemStatus}
                   confirmWebhookUpdate={confirmWebhookUpdate}
@@ -372,6 +442,12 @@ const AdminPage = () => {
           </main>
         </div>
       </div>
+
+      <VerificationOverlay 
+        isVisible={txOverlay.visible} 
+        message={txOverlay.message} 
+        description={txOverlay.description}
+      />
     </div>
   );
 };

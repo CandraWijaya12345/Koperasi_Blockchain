@@ -2,26 +2,40 @@
 import React, { useState, useEffect } from 'react';
 import { cardStyles as styles } from '../../styles/cards';
 import InlineMessage from '../InlineMessage';
-import { formatCurrency, formatToken, parseToken } from '../../utils/format';
+import { formatCurrency, formatrupiah, parserupiah } from '../../utils/format';
 
 const BoltIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></svg>;
 const CheckCircleIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>;
 const CalendarIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>;
+const AlertIcon = ({ size = 20 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+);
 
-export const SimpananWajibForm = ({ anggotaData, adminConfig, isLoading, isPaymentLocked, paymentSuccess, onPay, onPayInternal }) => {
+export const SimpananWajibForm = ({ anggotaData, adminConfig, isLoading, isPaymentLocked, paymentSuccess, paymentType, onPay, onPayInternal }) => {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState('');
   const [isError, setIsError] = useState(false);
 
   const billAmount = anggotaData?.currentBilling || 0n;
   const hasActiveBill = billAmount > 0n;
+  // [FIX] If no bill, show 0 to avoid "disuruh bayar 50rb" confusion when status is actually Lunas
   const displayAmount = hasActiveBill 
-    ? Number(formatToken(billAmount)) 
-    : (adminConfig?.wajib || 25000);
+    ? Number(formatrupiah(billAmount)) 
+    : 0;
+
+  const totalBill = Number(formatrupiah(billAmount));
+  const monthlyBillNominal = adminConfig?.wajib || 25000;
+  const tunggakan = totalBill > monthlyBillNominal ? totalBill - monthlyBillNominal : 0;
+  const tagihanBulanIni = totalBill > monthlyBillNominal ? monthlyBillNominal : totalBill;
+
+  const wasLocked = React.useRef(false);
 
   // Clear message or show cancellation when payment modal is closed
   useEffect(() => {
-    if (!isPaymentLocked && msg.includes("Menunggu")) {
+    if (isPaymentLocked && paymentType === 'wajib') {
+      wasLocked.current = true;
+    } else if (!isPaymentLocked && wasLocked.current) {
+      wasLocked.current = false;
       if (paymentSuccess) {
         setMsg('');
       } else {
@@ -30,7 +44,7 @@ export const SimpananWajibForm = ({ anggotaData, adminConfig, isLoading, isPayme
         setTimeout(() => setMsg(''), 5000);
       }
     }
-  }, [isPaymentLocked, msg, paymentSuccess]);
+  }, [isPaymentLocked, paymentSuccess, paymentType]);
 
   const handlePay = async () => {
     setLoading(true);
@@ -38,8 +52,6 @@ export const SimpananWajibForm = ({ anggotaData, adminConfig, isLoading, isPayme
     setIsError(false);
     try {
       await onPay((message) => setMsg(message));
-      setMsg("Menunggu pembayaran...");
-      setTimeout(() => setMsg(''), 5000);
     } catch (err) {
       console.error(err);
       setIsError(true);
@@ -56,19 +68,19 @@ export const SimpananWajibForm = ({ anggotaData, adminConfig, isLoading, isPayme
           <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#1e40af', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
              Simpanan Wajib & Tagihan
           </h3>
-          <p style={{ margin: '4px 0 0 0', fontSize: '0.9rem', color: '#64748b' }}>
-            {hasActiveBill ? '⚠️ Anda memiliki tagihan yang harus dibayar.' : 'Kewajiban bulanan teratur Anda.'}
+          <p style={{ margin: '4px 0 0 0', fontSize: '0.9rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            {hasActiveBill ? <><AlertIcon size={14} /> Tagihan tertunda ditemukan.</> : 'Kewajiban bulanan teratur Anda.'}
           </p>
         </div>
         <div style={{ textAlign: 'right' }}>
           <div style={{ fontSize: '1.25rem', fontWeight: '900', color: hasActiveBill ? '#2563eb' : '#0f172a' }}>
-            {formatCurrency(displayAmount)}
+            {formatCurrency(hasActiveBill ? totalBill : monthlyBillNominal)}
           </div>
-          <div style={{ fontSize: '0.8rem', color: '#64748b' }}>{hasActiveBill ? 'Tagihan Aktif' : '/ Per Periode'}</div>
+          <div style={{ fontSize: '0.8rem', color: '#64748b' }}>{hasActiveBill ? 'Total Tagihan Aktif' : '/ Per Periode'}</div>
         </div>
       </div>
 
-      <div style={{ background: hasActiveBill ? '#eff6ff' : '#f0fdf4', padding: '16px', borderRadius: '12px', border: hasActiveBill ? '1px solid #bfdbfe' : '1px solid #bbf7d0' }}>
+      <div style={{ background: hasActiveBill ? '#eff6ff' : '#f0fdf4', padding: '16px', borderRadius: '12px', border: hasActiveBill ? '1px solid #bfdbfe' : '1px solid #bbf7d0', marginBottom: '12px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
             <span style={{ color: hasActiveBill ? '#2563eb' : '#16a34a' }}>
@@ -76,15 +88,31 @@ export const SimpananWajibForm = ({ anggotaData, adminConfig, isLoading, isPayme
             </span>
             <div>
               <div style={{ fontSize: '0.95rem', fontWeight: '700', color: hasActiveBill ? '#1e40af' : '#166534' }}>
-                {hasActiveBill ? 'Tagihan Bulan Ini Tersedia' : 'Status: Lunas / Tidak Ada Tagihan'}
+                {hasActiveBill ? 'Tagihan Tersedia' : 'Status: Lunas / Tidak Ada Tagihan'}
               </div>
               <div style={{ fontSize: '0.8rem', color: hasActiveBill ? '#1e40af' : '#166534' }}>
                 {hasActiveBill ? 'Segera lakukan pembayaran untuk menjaga skor kredit Anda.' : 'Semua kewajiban telah terpenuhi.'}
               </div>
             </div>
           </div>
-          {hasActiveBill && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        </div>
+      </div>
+
+      {hasActiveBill && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+          <div style={{ padding: '12px', borderRadius: '10px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}>
+            <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '700', textTransform: 'uppercase' }}>Tagihan Bulan Ini</div>
+            <div style={{ fontSize: '1rem', fontWeight: '800', color: '#0f172a' }}>{formatCurrency(tagihanBulanIni)}</div>
+          </div>
+          <div style={{ padding: '12px', borderRadius: '10px', backgroundColor: tunggakan > 0 ? '#fff1f2' : '#f8fafc', border: '1px solid', borderColor: tunggakan > 0 ? '#fecaca' : '#e2e8f0' }}>
+            <div style={{ fontSize: '0.7rem', color: tunggakan > 0 ? '#b91c1c' : '#64748b', fontWeight: '700', textTransform: 'uppercase' }}>Tunggakan (Arrears)</div>
+            <div style={{ fontSize: '1rem', fontWeight: '800', color: tunggakan > 0 ? '#e11d48' : '#0f172a' }}>{formatCurrency(tunggakan)}</div>
+          </div>
+        </div>
+      )}
+
+      {hasActiveBill && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <button
                 onClick={handlePay}
                 disabled={isLoading || loading}
@@ -108,8 +136,6 @@ export const SimpananWajibForm = ({ anggotaData, adminConfig, isLoading, isPayme
                   setLoading(true); setMsg("Memproses potong saldo..."); setIsError(false);
                   try {
                     await onPayInternal((m) => setMsg(m));
-                    setMsg("Pembayaran Internal Berhasil!");
-                    setTimeout(() => setMsg(''), 5000);
                   } catch (e) {
                     setIsError(true); setMsg(e.message);
                     setTimeout(() => setMsg(''), 5000);
@@ -132,24 +158,25 @@ export const SimpananWajibForm = ({ anggotaData, adminConfig, isLoading, isPayme
               </button>
             </div>
           )}
-        </div>
-      </div>
-
-
       <InlineMessage message={msg} isError={isError} />
     </div>
   );
 };
 
-const SimpananForm = ({ onSetor, isLoading, isPaymentLocked, paymentSuccess }) => {
+const SimpananForm = ({ onSetor, isLoading, isPaymentLocked, paymentSuccess, paymentType }) => {
   const [jumlah, setJumlah] = useState('');
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState('');
   const [isError, setIsError] = useState(false);
 
+  const wasLocked = React.useRef(false);
+
   // Clear message or show cancellation when payment modal is closed
   useEffect(() => {
-    if (!isPaymentLocked && msg.includes("Menunggu")) {
+    if (isPaymentLocked && paymentType === 'simpanan') {
+      wasLocked.current = true;
+    } else if (!isPaymentLocked && wasLocked.current) {
+      wasLocked.current = false;
       if (paymentSuccess) {
         setMsg('');
       } else {
@@ -158,7 +185,7 @@ const SimpananForm = ({ onSetor, isLoading, isPaymentLocked, paymentSuccess }) =
         setTimeout(() => setMsg(''), 5000);
       }
     }
-  }, [isPaymentLocked, msg, paymentSuccess]);
+  }, [isPaymentLocked, paymentSuccess, paymentType]);
 
   const handlePay = async () => {
     if (!jumlah) return;
@@ -166,10 +193,7 @@ const SimpananForm = ({ onSetor, isLoading, isPaymentLocked, paymentSuccess }) =
 
     try {
       await onSetor(jumlah, setMsg);
-      // [FIX] Jangan langsung set sukses. Pesan sukses asli ada di SuccessModal.
-      setMsg('Menunggu verifikasi pembayaran...');
       setJumlah('');
-      setTimeout(() => setMsg(''), 5000);
     } catch (e) {
       if (e.message && e.message.includes("dibatalkan")) {
         setMsg("Pembayaran dibatalkan.");

@@ -5,7 +5,7 @@ async function main() {
     const provider = new ethers.JsonRpcProvider(rpcUrl);
     const privateKey = "9ed6e4ac1009f19d2fb079b52f249fe97bb04a778e184a1c2e934c8e03dd63fc";
     const wallet = new ethers.Wallet(privateKey, provider);
-    const koperasiAddress = "0xD2530547B22dE9C45fE0AEcd0af421fBB29C6d6f";
+    const koperasiAddress = "0x3BE9a134d553De9841f9FB116FE6B290c78C95d6";
     
     // ABI for updateGlobalSettings and settings
     const abi = [

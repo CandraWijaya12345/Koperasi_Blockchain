@@ -1,9 +1,9 @@
 {
   "0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c": {
-    "bank": "MANDIRI",
-    "accountNumber": "128371783",
-    "loanAmount": "100000",
-    "timestamp": 1776842730907
+    "bank": "BCA",
+    "accountNumber": "123123001230",
+    "loanAmount": "200000",
+    "timestamp": 1779446004890
   },
   "0xd17c0bd5deed0df5f783c697a2e5a99ad7ee4ab4": {
     "bank": "BCA",
@@ -13,8 +13,14 @@
   },
   "0xeb086198637df4033098b45f786eeb425270faca": {
     "bank": "BNI",
-    "accountNumber": "1236123736",
-    "loanAmount": "200000",
-    "timestamp": 1776843843395
+    "accountNumber": "28493992",
+    "loanAmount": "35000",
+    "timestamp": 1780571473429
+  },
+  "0xa73d8f213dbbf6367b19221b9883ed479d181dfe": {
+    "bank": "BNI",
+    "accountNumber": "12301230102",
+    "loanAmount": "100000",
+    "timestamp": 1779445963085
   }
 }

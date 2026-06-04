@@ -14,6 +14,21 @@ import AdminRoute from './routes/AdminRoute';
 import LoanDetailPage from './pages/LoanDetailPage';
 
 function App() {
+  React.useEffect(() => {
+    const preventScrollChange = (e) => {
+      if (e.target && e.target.type === 'number') {
+        e.preventDefault();
+      }
+    };
+    
+    // Gunakan passive: false agar e.preventDefault() dapat bekerja mencegah perubahan nominal
+    document.addEventListener('wheel', preventScrollChange, { passive: false });
+    
+    return () => {
+      document.removeEventListener('wheel', preventScrollChange);
+    };
+  }, []);
+
   return (
     <Router>
       <Routes>

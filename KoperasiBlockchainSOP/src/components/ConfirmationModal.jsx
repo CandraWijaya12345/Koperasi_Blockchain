@@ -33,9 +33,9 @@ const ConfirmationModal = ({ isOpen, title, message, onConfirm, onCancel, confir
                 <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '8px', color: '#1f2937' }}>
                     {title}
                 </h3>
-                <p style={{ color: '#6b7280', marginBottom: '24px', fontSize: '14px' }}>
+                <div style={{ color: '#6b7280', marginBottom: '24px', fontSize: '14px' }}>
                     {message}
-                </p>
+                </div>
                 {isLoading ? (
                     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '10px' }}>
                         <div style={{

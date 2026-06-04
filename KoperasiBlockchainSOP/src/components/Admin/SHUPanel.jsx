@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { formatCurrency, formatToken } from '../../utils/format';
+import { formatCurrency, formatrupiah } from '../../utils/format';
 import InlineMessage from '../InlineMessage';
 
 const MoneyIcon = () => (
@@ -25,7 +25,7 @@ const SHUPanel = ({ stats, history, members, onDistribute, isLoading }) => {
 
     // Calculate simulation
     // stats.rawProfit and stats.rawTotalSimpanan are BigInts or large numbers from contract
-    // But if formatToken converts to string decimals, we need raw values.
+    // But if formatrupiah converts to string decimals, we need raw values.
     // Assuming useKoperasi returns raw values in stats.
 
     const profit = stats.rawProfit ? BigInt(stats.rawProfit) : 0n;
@@ -159,7 +159,7 @@ const SHUPanel = ({ stats, history, members, onDistribute, isLoading }) => {
                                         })}
                                     </td>
                                     <td style={{ padding: '10px', fontWeight: 'bold', color: '#16a34a' }}>
-                                        {formatCurrency(formatToken(h.total))}
+                                        {formatCurrency(formatrupiah(h.total))}
                                     </td>
                                     <td style={{ padding: '10px', fontSize: '0.85rem', color: '#64748b', fontFamily: 'monospace' }}>
                                         {h.txHash ? h.txHash.substring(0, 16) + '...' : '-'}
@@ -183,7 +183,7 @@ const SHUPanel = ({ stats, history, members, onDistribute, isLoading }) => {
                     <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', maxWidth: '600px', width: '90%', maxHeight: '80vh', overflowY: 'auto' }}>
                         <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '16px' }}>Konfirmasi Pembagian</h3>
                         <p style={{ marginBottom: '16px', color: '#4b5563' }}>
-                            Berikut adalah <strong>estimasi</strong> pembagian SHU berdasarkan saldo profit saat ini ({formatCurrency(formatToken(profit))}) dan total simpanan ({formatCurrency(formatToken(totalSimpanan))}).
+                            Berikut adalah <strong>estimasi</strong> pembagian SHU berdasarkan saldo profit saat ini ({formatCurrency(formatrupiah(profit))}) dan total simpanan ({formatCurrency(formatrupiah(totalSimpanan))}).
                         </p>
 
                         <div style={{ overflowX: 'auto', marginBottom: '20px', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
@@ -202,8 +202,8 @@ const SHUPanel = ({ stats, history, members, onDistribute, isLoading }) => {
                                                 <div style={{ fontWeight: '500' }}>{s.name}</div>
                                                 <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{s.address.substring(0, 6)}...</div>
                                             </td>
-                                            <td style={{ padding: '8px' }}>{formatCurrency(formatToken(s.simpanan))}</td>
-                                            <td style={{ padding: '8px', fontWeight: 'bold', color: '#16a34a' }}>{formatCurrency(formatToken(s.share))}</td>
+                                            <td style={{ padding: '8px' }}>{formatCurrency(formatrupiah(s.simpanan))}</td>
+                                            <td style={{ padding: '8px', fontWeight: 'bold', color: '#16a34a' }}>{formatCurrency(formatrupiah(s.share))}</td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -252,7 +252,7 @@ const SHUPanel = ({ stats, history, members, onDistribute, isLoading }) => {
                             <div style={{ marginBottom: '8px' }}><ChartIcon /></div>
                             <h4 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#16a34a' }}>SHU Didistribusikan</h4>
                             <p style={{ fontSize: '1.8rem', fontWeight: 'bold', margin: '8px 0', color: '#0f172a' }}>
-                                {formatCurrency(formatToken(selectedHistory.total))}
+                                {formatCurrency(formatrupiah(selectedHistory.total))}
                             </p>
                             <p style={{ color: '#64748b', fontSize: '0.9rem' }}>
                                 {new Date(selectedHistory.timestamp * 1000).toLocaleString('id-ID', {

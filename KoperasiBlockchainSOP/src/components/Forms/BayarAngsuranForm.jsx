@@ -3,16 +3,21 @@ import React, { useState, useEffect } from 'react';
 import { cardStyles as styles } from '../../styles/cards';
 import InlineMessage from '../InlineMessage';
 
-const BayarAngsuranForm = ({ onBayar, isLoading, isPaymentLocked, paymentSuccess }) => {
+const BayarAngsuranForm = ({ onBayar, isLoading, isPaymentLocked, paymentSuccess, paymentType }) => {
   const [jumlah, setJumlah] = useState('');
 
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState('');
   const [isError, setIsError] = useState(false);
 
+  const wasLocked = React.useRef(false);
+
   // Clear message or show cancellation when payment modal is closed
   useEffect(() => {
-    if (!isPaymentLocked && msg.includes("Menunggu")) {
+    if (isPaymentLocked && paymentType === 'angsuran') {
+      wasLocked.current = true;
+    } else if (!isPaymentLocked && wasLocked.current) {
+      wasLocked.current = false;
       if (paymentSuccess) {
         setMsg('');
       } else {
@@ -21,7 +26,7 @@ const BayarAngsuranForm = ({ onBayar, isLoading, isPaymentLocked, paymentSuccess
         setTimeout(() => setMsg(''), 5000);
       }
     }
-  }, [isPaymentLocked, msg, paymentSuccess]);
+  }, [isPaymentLocked, paymentSuccess, paymentType]);
 
   const handleSubmit = async () => {
     if (!jumlah) return;

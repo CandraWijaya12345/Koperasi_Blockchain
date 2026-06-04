@@ -278,5 +278,251 @@
     "description": "Angsuran Pinjaman #8 - 0xeb086198637df4033098b45f786eeb425270faca",
     "status": "COMPLETED",
     "lastUpdate": "2026-04-22T07:48:53.710Z"
+  },
+  "TRX-1777028600013-503": {
+    "userAddress": "0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "amount": 100000,
+    "description": "Simpanan Koperasi (Sukarela) - 0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-04-24T11:03:45.675Z"
+  },
+  "TRX-1777281349313-742": {
+    "userAddress": "0xd17c0bd5deed0df5f783c697a2e5a99ad7ee4ab4",
+    "amount": 75000,
+    "description": "Simpanan Koperasi (Wajib) - 0xd17c0bd5deed0df5f783c697a2e5a99ad7ee4ab4",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-04-27T09:16:05.739Z"
+  },
+  "TRX-1777282229588-732": {
+    "userAddress": "0xd17c0bd5deed0df5f783c697a2e5a99ad7ee4ab4",
+    "amount": 100000,
+    "description": "Simpanan Koperasi (Sukarela) - 0xd17c0bd5deed0df5f783c697a2e5a99ad7ee4ab4",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-04-27T09:30:46.198Z"
+  },
+  "TRX-1777522832482-802": {
+    "userAddress": "0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "amount": 10000,
+    "description": "Simpanan Koperasi (Sukarela) - 0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-04-30T04:20:49.738Z"
+  },
+  "TRX-1778588991368-48": {
+    "userAddress": "0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "amount": 100000,
+    "description": "Simpanan Koperasi (Pokok) - 0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-05-12T12:30:19.436Z"
+  },
+  "TRX-1778839188436-452": {
+    "userAddress": "0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "amount": 100000,
+    "description": "Simpanan Koperasi (Pokok) - 0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-05-15T10:05:49.599Z",
+    "error": "execution reverted: \"User tidak dikenal\" (action=\"estimateGas\", data=\"0x08c379a0000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000125573657220746964616b2064696b656e616c0000000000000000000000000000\", reason=\"User tidak dikenal\", transaction={ \"data\": \"0xeba4234a000000000000000000000000b0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c00000000000000000000000000000000000000000000152d02c7e14af68000000000000000000000000000000000000000000000000000000000000000000000\", \"from\": \"0xB0760cCab9a66D8529e80B3Ec3E17f3c7D8E1C3c\", \"to\": \"0xf9a976c90572829e71C33C428b9F42849DA892Ac\" }, invocation=null, revert={ \"args\": [ \"User tidak dikenal\" ], \"name\": \"Error\", \"signature\": \"Error(string)\" }, code=CALL_EXCEPTION, version=6.16.0)"
+  },
+  "TRX-1778839422887-742": {
+    "userAddress": "0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "amount": 100000,
+    "description": "Simpanan Koperasi (Pokok) - 0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-05-15T10:05:57.173Z"
+  },
+  "TRX-1779184245792-369": {
+    "userAddress": "0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "amount": 50000,
+    "description": "Simpanan Koperasi (Wajib) - 0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-05-19T09:51:01.137Z"
+  },
+  "TRX-1779184522670-506": {
+    "userAddress": "0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "amount": 25000,
+    "description": "Simpanan Koperasi (Wajib) - 0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-05-19T09:55:38.242Z"
+  },
+  "TRX-1779184646782-44": {
+    "userAddress": "0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "amount": 25000,
+    "description": "Simpanan Koperasi (Wajib) - 0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-05-19T09:57:42.859Z"
+  },
+  "TRX-1779185787614-738": {
+    "userAddress": "0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "amount": 150000,
+    "description": "Simpanan Koperasi (Sukarela) - 0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-05-19T10:16:47.099Z"
+  },
+  "REPAY-1-1779186748999-888": {
+    "userAddress": "0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "amount": 100000,
+    "description": "Angsuran Pinjaman #1 - 0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-05-19T10:32:48.801Z"
+  },
+  "REPAY-1-1779187227312-906": {
+    "userAddress": "0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "amount": 10000,
+    "description": "Angsuran Pinjaman #1 - 0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-05-19T10:40:46.079Z"
+  },
+  "TRX-1779442379266-495": {
+    "userAddress": "0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "amount": 100000,
+    "description": "Simpanan Koperasi (Pokok) - 0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-05-22T09:33:15.316Z"
+  },
+  "TRX-1779443808302-42": {
+    "userAddress": "0xa73d8f213dbbf6367b19221b9883ed479d181dfe",
+    "amount": 100000,
+    "description": "Simpanan Koperasi (Pokok) - 0xa73d8f213dbbf6367b19221b9883ed479d181dfe",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-05-22T09:57:11.807Z"
+  },
+  "TRX-1779444637649-750": {
+    "userAddress": "0xa73d8f213dbbf6367b19221b9883ed479d181dfe",
+    "amount": 10000,
+    "description": "Simpanan Koperasi (Sukarela) - 0xa73d8f213dbbf6367b19221b9883ed479d181dfe",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-05-22T10:10:49.980Z"
+  },
+  "TRX-1779445390690-300": {
+    "userAddress": "0xa73d8f213dbbf6367b19221b9883ed479d181dfe",
+    "amount": 10000,
+    "description": "Simpanan Koperasi (Sukarela) - 0xa73d8f213dbbf6367b19221b9883ed479d181dfe",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-05-22T10:23:24.420Z"
+  },
+  "TRX-1779682090383-755": {
+    "userAddress": "0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "amount": 20000,
+    "description": "Simpanan Koperasi (Sukarela) - 0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-05-25T04:08:23.677Z"
+  },
+  "TRX-1780062343084-282": {
+    "userAddress": "0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "amount": 100000,
+    "description": "Simpanan Koperasi (Sukarela) - 0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-05-29T13:45:58.538Z"
+  },
+  "TRX-1780063662862-565": {
+    "userAddress": "0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "amount": 5000,
+    "description": "Simpanan Koperasi (Sukarela) - 0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-05-29T14:08:07.407Z"
+  },
+  "TEST-TRX-1780064110523": {
+    "userAddress": "Debugging",
+    "amount": 50000,
+    "description": "Test Simpanan Koperasi - Debugging",
+    "status": "PROCESSING",
+    "lastUpdate": "2026-06-04T17:17:12.919Z"
+  },
+  "TRX-1780564150604-415": {
+    "userAddress": "0xeb086198637DF4033098B45F786eeb425270FaCA",
+    "amount": 100000,
+    "description": "Simpanan Koperasi (Pokok) - 0xeb086198637DF4033098B45F786eeb425270FaCA",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-06-04T09:09:59.482Z"
+  },
+  "TRX-1780565066783-739": {
+    "userAddress": "0xeb086198637df4033098b45f786eeb425270faca",
+    "amount": 25000,
+    "description": "Simpanan Koperasi (Wajib) - 0xeb086198637df4033098b45f786eeb425270faca",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-06-04T09:25:06.134Z"
+  },
+  "TRX-1780565348800-550": {
+    "userAddress": "0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "amount": 25000,
+    "description": "Simpanan Koperasi (Wajib) - 0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-06-04T09:29:27.618Z"
+  },
+  "TRX-1780565654803-840": {
+    "userAddress": "0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "amount": 25000,
+    "description": "Simpanan Koperasi (Wajib) - 0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-06-04T09:34:28.133Z"
+  },
+  "TRX-1780566784702-209": {
+    "userAddress": "0xeb086198637df4033098b45f786eeb425270faca",
+    "amount": 25000,
+    "description": "Simpanan Koperasi (Wajib) - 0xeb086198637df4033098b45f786eeb425270faca",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-06-04T09:53:17.414Z"
+  },
+  "TRX-1780566817641-1": {
+    "userAddress": "0xeb086198637df4033098b45f786eeb425270faca",
+    "amount": 25000,
+    "description": "Simpanan Koperasi (Wajib) - 0xeb086198637df4033098b45f786eeb425270faca",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-06-04T09:53:51.999Z"
+  },
+  "TRX-1780567236333-97": {
+    "userAddress": "0xa73d8f213dbbf6367b19221b9883ed479d181dfe",
+    "amount": 50000,
+    "description": "Simpanan Koperasi (Wajib) - 0xa73d8f213dbbf6367b19221b9883ed479d181dfe",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-06-04T10:00:49.709Z"
+  },
+  "TRX-1780568330309-812": {
+    "userAddress": "0xa73d8f213dbbf6367b19221b9883ed479d181dfe",
+    "amount": 10000,
+    "description": "Simpanan Koperasi (Sukarela) - 0xa73d8f213dbbf6367b19221b9883ed479d181dfe",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-06-04T10:18:58.181Z"
+  },
+  "TRX-1780568392192-309": {
+    "userAddress": "0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "amount": 25000,
+    "description": "Simpanan Koperasi (Wajib) - 0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-06-04T10:20:09.004Z"
+  },
+  "TRX-1780568433366-225": {
+    "userAddress": "0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "amount": 10000,
+    "description": "Simpanan Koperasi (Sukarela) - 0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-06-04T10:20:46.950Z"
+  },
+  "TRX-1780570847772-915": {
+    "userAddress": "0xeb086198637df4033098b45f786eeb425270faca",
+    "amount": 25000,
+    "description": "Simpanan Koperasi (Wajib) - 0xeb086198637df4033098b45f786eeb425270faca",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-06-04T11:01:02.119Z"
+  },
+  "TRX-1780570864841-588": {
+    "userAddress": "0xeb086198637df4033098b45f786eeb425270faca",
+    "amount": 25000,
+    "description": "Simpanan Koperasi (Wajib) - 0xeb086198637df4033098b45f786eeb425270faca",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-06-04T11:01:17.234Z"
+  },
+  "TRX-1780571020286-526": {
+    "userAddress": "0xeb086198637df4033098b45f786eeb425270faca",
+    "amount": 100000,
+    "description": "Simpanan Koperasi (Sukarela) - 0xeb086198637df4033098b45f786eeb425270faca",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-06-04T11:04:01.059Z"
+  },
+  "TRX-1780574991235-757": {
+    "userAddress": "0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "amount": 5000,
+    "description": "Simpanan Koperasi (Sukarela) - 0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+    "status": "COMPLETED",
+    "lastUpdate": "2026-06-04T12:10:01.723Z"
   }
 }

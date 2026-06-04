@@ -9,19 +9,19 @@ const __dirname = path.dirname(__filename);
 async function main() {
     try {
         console.log("Loading ABI...");
-        const abiPath = path.join(__dirname, 'src/abi/idrtokenbaru.json');
+        const abiPath = path.join(__dirname, 'src/abi/idrABI.json');
         const abi = JSON.parse(fs.readFileSync(abiPath, 'utf8'));
 
         console.log("Connecting to RPC...");
         const provider = new ethers.JsonRpcProvider('https://rpc-amoy.polygon.technology/');
 
-        const tokenAddress = "0x64Ac500ace0F003789Ff5906dDD8e7cd7BF7Bf7e";
-        const koperasiAddress = "0x6e501AB6144961623b213E4b012B128504A8Db15";
+        const idrAddress = "0xC71168cb6fB6AA39Be28b55BDeDd561D70181477";
+        const koperasiAddress = "0x3BE9a134d553De9841f9FB116FE6B290c78C95d6";
 
-        console.log(`Checking Balance of ${koperasiAddress} in Token ${tokenAddress}...`);
-        const token = new ethers.Contract(tokenAddress, abi, provider);
+        console.log(`Checking Balance of ${koperasiAddress} in rupiah ${idrAddress}...`);
+        const idr = new ethers.Contract(idrAddress, abi, provider);
 
-        const bal = await token.balanceOf(koperasiAddress);
+        const bal = await idr.balanceOf(koperasiAddress);
         console.log("---------------------------------------------------");
         console.log("FINAL BALANCE:", bal.toString());
         console.log("---------------------------------------------------");

@@ -1,6 +1,7 @@
 // components/Admin/AdminSettings.jsx
 import React, { useState, useEffect } from 'react';
 import InlineMessage from '../InlineMessage';
+import ConfirmationModal from '../ConfirmationModal';
 import { cardStyles } from '../../styles/cards';
 
 // --- Professional Icons ---
@@ -21,6 +22,12 @@ const PiggyIcon = () => (
 );
 const ShieldCheckIcon = () => (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><polyline points="9 12 11 14 15 10" /></svg>
+);
+const StorageIcon = () => (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><polyline points="3.27 6.96 12 12.01 20.73 6.96" /><line x1="12" y1="22.08" x2="12" y2="12" /></svg>
+);
+const AlertIcon = ({ size = 20 }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
 );
 
 const localStyles = {
@@ -175,7 +182,7 @@ const formatIDR = (val) => {
     return new Intl.NumberFormat('id-ID').format(val || 0);
 };
 
-const AdminSettings = ({ config, onUpdate, isLoading, systemStatus }) => {
+const AdminSettings = ({ config, onUpdate, onChangeStorageMode, isLoading, systemStatus }) => {
     const [formData, setFormData] = useState({
         bungaSimpanan: '9', // Max limit is 9%
         bungaPinjaman: '12',
@@ -185,12 +192,15 @@ const AdminSettings = ({ config, onUpdate, isLoading, systemStatus }) => {
         feeAdmin: '0',
         feeProvisi: '0',
         feeResiko: '0',
+        minSaldo: '0',
         deductUpfront: false
     });
 
     const [msg, setMsg] = useState('');
     const [isError, setIsError] = useState(false);
     const [localLoading, setLocalLoading] = useState(false);
+    const [storageLoading, setStorageLoading] = useState(false);
+    const [showStorageConfirm, setShowStorageConfirm] = useState(false);
 
     // [FIX] Update formData only when config is loaded, but NOT while user is actively editing/saving
     useEffect(() => {
@@ -204,6 +214,7 @@ const AdminSettings = ({ config, onUpdate, isLoading, systemStatus }) => {
                 feeAdmin: config.feeAdmin?.toString() || '0',
                 feeProvisi: config.feeProvisi?.toString() || '0',
                 feeResiko: config.feeResiko?.toString() || '0',
+                minSaldo: config.minSaldo?.toString() || '0',
                 deductUpfront: !!config.deductUpfront
             });
         }
@@ -216,15 +227,32 @@ const AdminSettings = ({ config, onUpdate, isLoading, systemStatus }) => {
         setIsError(false);
 
         try {
+            // [NEW] Integer check for fields that contract expects as uint256
+            if (formData.bungaSimpanan.includes('.') || formData.bungaSimpanan.includes(',')) throw new Error("Bunga Simpanan harus angka bulat (tidak boleh desimal)");
+            if (formData.bungaPinjaman.includes('.') || formData.bungaPinjaman.includes(',')) throw new Error("Bunga Pinjaman harus angka bulat");
+            if (formData.dendaHarian.includes('.') || formData.dendaHarian.includes(',')) throw new Error("Denda harus angka bulat");
+
+            // [NEW] Local Validation according to Permenkop / Common sense
+            const bSimp = parseInt(formData.bungaSimpanan);
+            const bPinj = parseInt(formData.bungaPinjaman);
+            const denda = parseInt(formData.dendaHarian);
+            const provisi = parseInt(formData.feeProvisi);
+
+            if (bSimp > 9) throw new Error("Bunga Simpanan maksimal 9% (Regulasi Permenkop)");
+            if (bPinj > 24) throw new Error("Bunga Pinjaman maksimal 24% per tahun (Wajar)");
+            if (denda > 10) throw new Error("Denda maksimal 10 permil (1%) per hari");
+            if (provisi > 10) throw new Error("Provisi maksimal 10%");
+
             const params = {
-                bungaSimpanan: parseInt(formData.bungaSimpanan),
-                bungaPinjaman: parseInt(formData.bungaPinjaman),
-                dendaHarian: parseInt(formData.dendaHarian),
+                bungaSimpanan: bSimp,
+                bungaPinjaman: bPinj,
+                dendaHarian: denda,
                 pokok: formData.pokok,
                 wajib: formData.wajib,
                 feeAdmin: formData.feeAdmin,
                 feeProvisi: parseInt(formData.feeProvisi),
                 feeResiko: parseInt(formData.feeResiko),
+                minSaldo: formData.minSaldo,
                 deductUpfront: formData.deductUpfront
             };
             await onUpdate(params, (m) => setMsg(m));
@@ -238,6 +266,37 @@ const AdminSettings = ({ config, onUpdate, isLoading, systemStatus }) => {
             setMsg('Gagal: ' + (err.message || err));
         }
         setLocalLoading(false);
+    };
+
+    const handleStorageModeToggle = () => {
+        if (!onChangeStorageMode) {
+            setIsError(true);
+            setMsg("Metode perubahan mode penyimpanan tidak tersedia.");
+            return;
+        }
+        setShowStorageConfirm(true);
+    };
+
+    const confirmStorageModeToggle = async () => {
+        setShowStorageConfirm(false);
+        const currentMode = !!config?.useIPFSStorage;
+        const targetMode = !currentMode;
+        
+        setStorageLoading(true);
+        setMsg("Memproses perubahan mode penyimpanan via MetaMask... Harap setujui transaksi di wallet Anda.");
+        setIsError(false);
+        
+        try {
+            await onChangeStorageMode(targetMode, (m) => setMsg(m));
+            setMsg(`Sukses! Mode penyimpanan berhasil diubah ke ${targetMode ? "IPFS (Off-Chain)" : "ON-CHAIN"}.`);
+            setTimeout(() => setMsg(''), 8000);
+        } catch (err) {
+            console.error(err);
+            setIsError(true);
+            setMsg("Gagal mengubah mode: " + (err.message || err));
+        } finally {
+            setStorageLoading(false);
+        }
     };
 
     return (
@@ -274,9 +333,9 @@ const AdminSettings = ({ config, onUpdate, isLoading, systemStatus }) => {
                         <span style={localStyles.summaryUnit}>Per Hari</span>
                     </div>
                     <div style={localStyles.summaryItem}>
-                        <span style={localStyles.summaryLabel}>Simpanan Wajib</span>
+                        <span style={localStyles.summaryLabel}>Uang Pangkal / Adm</span>
                         <span style={localStyles.summaryValue}>Rp {formatIDR(config?.wajib)}</span>
-                        <span style={localStyles.summaryUnit}>/ Periode</span>
+                        <span style={localStyles.summaryUnit}>Sekali Bayar</span>
                     </div>
                     <div style={localStyles.summaryItem}>
                         <span style={localStyles.summaryLabel}>Upfront Deduct</span>
@@ -303,7 +362,7 @@ const AdminSettings = ({ config, onUpdate, isLoading, systemStatus }) => {
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px' }}>
                             <div>
-                                <label style={localStyles.label}>Ubah Simpanan Pokok</label>
+                                <label style={localStyles.label}>Ubah Simpanan Pokok (Tabungan Awal)</label>
                                 <span style={localStyles.activeHint}>Aktif: Rp {formatIDR(config?.pokok)}</span>
                                 <input
                                     type="number"
@@ -314,7 +373,7 @@ const AdminSettings = ({ config, onUpdate, isLoading, systemStatus }) => {
                                 />
                             </div>
                             <div>
-                                <label style={localStyles.label}>Simpanan Wajib (Bulanan)</label>
+                                <label style={localStyles.label}>Uang Pangkal / Biaya Adm Pendaftaran</label>
                                 <span style={localStyles.activeHint}>Aktif: Rp {formatIDR(config?.wajib)}</span>
                                 <input
                                     type="number"
@@ -322,6 +381,17 @@ const AdminSettings = ({ config, onUpdate, isLoading, systemStatus }) => {
                                     value={formData.wajib}
                                     placeholder="e.g. 25000"
                                     onChange={e => setFormData({ ...formData, wajib: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <label style={localStyles.label}>Minimal Saldo Ditahan</label>
+                                <span style={localStyles.activeHint}>Aktif: Rp {formatIDR(config?.minSaldo)}</span>
+                                <input
+                                    type="number"
+                                    style={localStyles.input}
+                                    value={formData.minSaldo}
+                                    placeholder="e.g. 50000"
+                                    onChange={e => setFormData({ ...formData, minSaldo: e.target.value })}
                                 />
                             </div>
                         </div>
@@ -338,13 +408,18 @@ const AdminSettings = ({ config, onUpdate, isLoading, systemStatus }) => {
                             <SavingsIcon />
                             <h3 style={localStyles.cardTitle}>Simpanan & Imbal Hasil</h3>
                         </div>
-                        <input
-                            type="number"
-                            max="9"
-                            style={localStyles.input}
-                            value={formData.bungaSimpanan}
-                            onChange={e => setFormData({ ...formData, bungaSimpanan: e.target.value })}
-                        />
+                            <div style={{ marginBottom: '12px' }}>
+                                <label style={localStyles.label}>Bunga Simpanan Berjangka (%)</label>
+                                <span style={localStyles.activeHint}>Aktif: {config?.bunga}% per Tahun</span>
+                                <input
+                                    type="number"
+                                    max="9"
+                                    step="1"
+                                    style={localStyles.input}
+                                    value={formData.bungaSimpanan}
+                                    onChange={e => setFormData({ ...formData, bungaSimpanan: e.target.value })}
+                                />
+                            </div>
                         <p style={localStyles.helper}>
                             Persentase imbal hasil tahunan (Maksimal 9% sesuai regulasi).
                         </p>
@@ -364,6 +439,7 @@ const AdminSettings = ({ config, onUpdate, isLoading, systemStatus }) => {
                                 <span style={localStyles.activeHint}>Aktif: {config?.bungaPinjaman}%</span>
                                 <input
                                     type="number"
+                                    step="1"
                                     style={localStyles.input}
                                     value={formData.bungaPinjaman}
                                     onChange={e => setFormData({ ...formData, bungaPinjaman: e.target.value })}
@@ -374,6 +450,7 @@ const AdminSettings = ({ config, onUpdate, isLoading, systemStatus }) => {
                                 <span style={localStyles.activeHint}>Aktif: {config?.denda}‰</span>
                                 <input
                                     type="number"
+                                    step="1"
                                     style={localStyles.input}
                                     value={formData.dendaHarian}
                                     onChange={e => setFormData({ ...formData, dendaHarian: e.target.value })}
@@ -418,6 +495,107 @@ const AdminSettings = ({ config, onUpdate, isLoading, systemStatus }) => {
                             Jika dicentang, dana yang diterima anggota akan dikurangi biaya di muka. Jika tidak, biaya akan ditambahkan ke total hutang.
                         </p>
                     </div>
+                </div>
+            </div>
+
+            {/* --- PENYIMPANAN DATA SETTINGS SECTION --- */}
+            <div style={{ ...localStyles.summarySection, background: '#fff', border: '1px solid #e2e8f0', boxShadow: 'none', marginBottom: '24px' }}>
+                <style>{`
+                    @keyframes spin {
+                        to { transform: rotate(360deg); }
+                    }
+                `}</style>
+                
+                <div style={localStyles.summaryHeader}>
+                    <div style={{ color: '#2563eb' }}><StorageIcon /></div>
+                    <h3 style={localStyles.summaryTitle}>Setelan Penyimpanan Data Keanggotaan</h3>
+                </div>
+
+                <div style={{ 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    gap: '16px',
+                    padding: '24px',
+                    borderRadius: '16px',
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0'
+                }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+                        <div style={{ flex: 1, minWidth: '280px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: '0.9rem', fontWeight: '800', color: '#1e293b' }}>
+                                    Mode Penyimpanan Data:
+                                </span>
+                                <span style={{ 
+                                    padding: '4px 10px', 
+                                    borderRadius: '99px', 
+                                    fontSize: '0.75rem', 
+                                    fontWeight: '800',
+                                    background: config?.useIPFSStorage ? '#3b82f6' : '#22c55e',
+                                    color: '#fff',
+                                    textTransform: 'uppercase'
+                                }}>
+                                    {config?.useIPFSStorage ? 'IPFS (GDPR-Compliant)' : 'Full ON-CHAIN (Public)'}
+                                </span>
+                            </div>
+                            <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '6px', maxWidth: '650px', lineHeight: '1.5' }}>
+                                {config?.useIPFSStorage ? (
+                                    <span>
+                                        <strong>Mode IPFS Aktif:</strong> Nama anggota baru dienkripsi dan disimpan di desentralisasi IPFS (Pinata). Blockchain hanya mencatat hash referensi data. Sangat direkomendasikan untuk kepatuhan privasi data pribadi (GDPR / UU PDP).
+                                    </span>
+                                ) : (
+                                    <span>
+                                        <strong>Mode On-Chain Aktif:</strong> Nama anggota baru dicatat secara plain-text langsung ke dalam ledger publik blockchain. Seluruh node dapat melakukan audit langsung. Lebih cepat, namun nama anggota terlihat publik di scanner blockchain.
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Interactive Toggle Switch */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: '700', color: config?.useIPFSStorage ? '#94a3b8' : '#1e293b' }}>ON-CHAIN</span>
+                            <div 
+                                onClick={!storageLoading && !isLoading ? handleStorageModeToggle : undefined}
+                                style={{
+                                    width: '64px',
+                                    height: '32px',
+                                    backgroundColor: config?.useIPFSStorage ? '#3b82f6' : '#cbd5e1',
+                                    borderRadius: '99px',
+                                    padding: '3px',
+                                    cursor: storageLoading || isLoading ? 'not-allowed' : 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: config?.useIPFSStorage ? 'flex-end' : 'flex-start',
+                                    transition: 'all 0.3s ease-in-out',
+                                    boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.1)'
+                                }}
+                            >
+                                <div style={{
+                                    width: '26px',
+                                    height: '26px',
+                                    backgroundColor: '#ffffff',
+                                    borderRadius: '50%',
+                                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+                                }} />
+                            </div>
+                            <span style={{ fontSize: '0.8rem', fontWeight: '700', color: config?.useIPFSStorage ? '#3b82f6' : '#94a3b8' }}>IPFS</span>
+                        </div>
+                    </div>
+
+                    {storageLoading && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#3b82f6', fontSize: '0.85rem', fontWeight: '600' }}>
+                            <div style={{
+                                width: '16px',
+                                height: '16px',
+                                border: '2px solid currentColor',
+                                borderTopColor: 'transparent',
+                                borderRadius: '50%',
+                                animation: 'spin 1s linear infinite'
+                            }} />
+                            <span>Menunggu konfirmasi blockchain via MetaMask...</span>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -477,8 +655,8 @@ const AdminSettings = ({ config, onUpdate, isLoading, systemStatus }) => {
 
                     {systemStatus?.tunnel === 'ONLINE' && systemStatus?.webhookMismatch && (
                         <div style={{ padding: '20px', background: '#fff', borderRadius: '12px', border: '2px dashed #ef4444' }}>
-                            <div style={{ display: 'flex', gap: '12px', marginBottom: '8px' }}>
-                                <span style={{ fontSize: '1.2rem' }}>⏳</span>
+                            <div style={{ display: 'flex', gap: '12px', marginBottom: '8px', alignItems: 'center' }}>
+                                <AlertIcon size={20} />
                                 <p style={{ fontSize: '0.9rem', color: '#991b1b', margin: 0, fontWeight: '600', lineHeight: 1.5 }}>
                                     Sedang menyinkronkan URL baru ke Xendit... (Proses Otomatis)
                                 </p>
@@ -539,6 +717,30 @@ const AdminSettings = ({ config, onUpdate, isLoading, systemStatus }) => {
                     {msg && <div style={{ minWidth: '300px' }}><InlineMessage message={msg} isError={isError} /></div>}
                 </div>
             </div>
+
+            {/* Confirmation Modal untuk Perubahan Mode Penyimpanan */}
+            <ConfirmationModal
+                isOpen={showStorageConfirm}
+                title="Konfirmasi Perubahan Mode Penyimpanan"
+                message={
+                    <div>
+                        <p style={{ fontWeight: '600', marginBottom: '12px', fontSize: '15px' }}>
+                            {config?.useIPFSStorage
+                                ? "Apakah Anda yakin ingin mengubah ke Mode ON-CHAIN?"
+                                : "Apakah Anda yakin ingin mengubah ke Mode IPFS?"}
+                        </p>
+                        <p style={{ fontSize: '13px', color: '#6b7280', lineHeight: '1.5', textAlign: 'left', backgroundColor: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                            {config?.useIPFSStorage
+                                ? "Nama anggota baru akan disimpan secara publik langsung di dalam ledger blockchain (On-Chain). Semua pihak dapat melakukan audit langsung secara transparan."
+                                : "Nama anggota baru akan disimpan di IPFS."}
+                        </p>
+                    </div>
+                }
+                onConfirm={confirmStorageModeToggle}
+                onCancel={() => setShowStorageConfirm(false)}
+                confirmText="Ya, Ubah Metode"
+                cancelText="Batal"
+            />
         </div>
     );
 };

@@ -127,8 +127,8 @@ contract KoperasiSimpanPinjam is ReentrancyGuard, Ownable {
     uint256 public totalSHUDibagikan;
 
     bool public useIPFSStorage = false;
-
     event StorageModeUpdated(address indexed admin, bool useIPFS, uint256 timestamp);
+
     event AnggotaBaru(address indexed user, string nama, uint256 timestamp);
     event AnggotaRejoin(address indexed user, uint256 timestamp); 
     event DepositTercatat(address indexed user, uint256 jumlah, string jenis, uint256 timestamp);
@@ -340,18 +340,13 @@ contract KoperasiSimpanPinjam is ReentrancyGuard, Ownable {
     }
 
     function generateMonthlyBills(uint256 _nominal) external hanyaPengurus {
-        uint256 activeHumanMembers = 0;
         for (uint i = 0; i < listAlamatAnggota.length; i++) {
             address member = listAlamatAnggota[i];
-            if (member == address(this)) {
-                continue; // Exclude Koperasi Reserve from tagihan wajib
-            }
             if (dataAnggota[member].status == MemberStatus.Active) {
                 tagihanWajib[member] += _nominal;
-                activeHumanMembers++;
             }
         }
-        emit TagihanDibuat(_nominal * activeHumanMembers, block.timestamp);
+        emit TagihanDibuat(_nominal * jumlahAnggota, block.timestamp);
     }
 
     function bayarTagihanWajib(uint256 _amount) external hanyaAnggota openPeriod nonReentrant {

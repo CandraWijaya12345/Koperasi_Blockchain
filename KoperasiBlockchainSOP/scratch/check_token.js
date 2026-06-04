@@ -8,7 +8,7 @@ async function checkTokenAddress() {
     const contract = new ethers.Contract(contractAddr, abi, provider);
     
     try {
-        const tokenAddr = await contract.idrToken();
+        const tokenAddr = await contract.saldoIDR();
         console.log("CONTRACT_ADDRESS:", contractAddr);
         console.log("TOKEN_ADDRESS from Contract:", tokenAddr);
     } catch (err) {

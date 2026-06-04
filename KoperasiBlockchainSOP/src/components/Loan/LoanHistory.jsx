@@ -1,5 +1,5 @@
 import React from 'react';
-import { formatCurrency, formatToken } from '../../utils/format';
+import { formatCurrency, formatrupiah } from '../../utils/format';
 
 const LoanHistory = ({ history }) => {
     // Filter events related to loans
@@ -77,7 +77,7 @@ const LoanHistory = ({ history }) => {
                             return (
                                 <tr key={loan.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                                     <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#1e293b', fontWeight: '500' }}>#{loan.id}</td>
-                                    <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#1e293b', fontWeight: '700' }}>{formatCurrency(formatToken(loan.jumlah))}</td>
+                                    <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#1e293b', fontWeight: '700' }}>{formatCurrency(formatrupiah(loan.jumlah))}</td>
                                     <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#1e293b' }}>{loan.tenor} Bulan</td>
                                     <td style={{ padding: '12px 16px' }}>
                                         <span style={{ 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { cardStyles as styles } from '../../styles/cards';
 import InlineMessage from '../InlineMessage';
-import { formatCurrency, formatToken, formatTokenInt } from '../../utils/format';
+import { formatCurrency, formatrupiah, formatrupiahInt } from '../../utils/format';
 
 const LockIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>;
 const UnlockIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 9.9-1" /></svg>;
@@ -9,7 +9,7 @@ const TrendingUpIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fil
 
 const SimpananBerjangkaForm = ({ 
   userTimeDeposits, 
-  idrtBalance, 
+  idrBalance, 
   anggotaData, 
   onOpen, 
   onCair, 
@@ -97,7 +97,7 @@ const SimpananBerjangkaForm = ({
                 style={{ ...styles.input, marginBottom: 0, paddingRight: '60px' }}
               />
               <button 
-                onClick={() => setAmount(formatTokenInt(anggotaData?.simpananSukarela || 0n))}
+                onClick={() => setAmount(formatrupiahInt(anggotaData?.simpananSukarela || 0n))}
                 style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', padding: '4px 10px', fontSize: '0.7rem', fontWeight: '700', cursor: 'pointer' }}
               >
                 MAX
@@ -105,7 +105,7 @@ const SimpananBerjangkaForm = ({
             </div>
             <div style={{ marginTop: '6px', fontSize: '0.75rem', color: '#64748b', display: 'flex', justifyContent: 'space-between' }}>
               <span>Saldo Sukarela Tersedia:</span>
-              <span style={{ fontWeight: '600', color: '#1e40af' }}>{formatCurrency(formatToken(anggotaData?.simpananSukarela || 0n))}</span>
+              <span style={{ fontWeight: '600', color: '#1e40af' }}>{formatCurrency(formatrupiah(anggotaData?.simpananSukarela || 0n))}</span>
             </div>
           </div>
 
@@ -130,7 +130,7 @@ const SimpananBerjangkaForm = ({
                     transition: 'all 0.2s'
                   }}
                 >
-                  {t} Bln
+                  {t} Bulan
                 </button>
               ))}
             </div>
@@ -185,17 +185,17 @@ const SimpananBerjangkaForm = ({
                     </div>
                     <div>
                       <div style={{ fontSize: '0.95rem', fontWeight: '700', color: '#111827' }}>
-                        {formatCurrency(formatToken(dep.amount))}
+                        {formatCurrency(formatrupiah(dep.amount))}
                       </div>
                       <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
-                        {isMatured ? 'Siap Dicairkan' : `Jatuh tempo dlm ${daysLeft} hari`}
+                        {isMatured ? 'Siap Dicairkan' : `Jatuh tempo dalam ${daysLeft} hari`}
                       </div>
                     </div>
                   </div>
 
                   <div style={{ textAlign: 'right' }}>
                     <div style={{ fontSize: '0.8rem', fontWeight: '700', color: '#16a34a', marginBottom: '4px' }}>
-                      Jasa: +{formatCurrency(formatToken(dep.interestRate))}
+                      Jasa: +{formatCurrency(formatrupiah(dep.interestRate))}
                     </div>
                     <button
                       onClick={() => handleCairkan(dep.index)}

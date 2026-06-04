@@ -161,7 +161,7 @@ const AjukanPinjamanForm = ({ onAjukan, isLoading, maxLimit, adminConfig }) => {
               </div>
               <div style={{ height: '1px', background: '#cbd5e1', margin: '4px 0' }}></div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#64748b' }}>Total Bunga ({tenorVal} bln):</span>
+                <span style={{ color: '#64748b' }}>Total Bunga ({tenorVal} bulan):</span>
                 <b style={{ color: '#ea580c' }}>+ {formatRp(totalBunga)}</b>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1rem', marginTop: '8px' }}>

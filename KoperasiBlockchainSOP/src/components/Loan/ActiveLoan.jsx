@@ -2,11 +2,11 @@
 import React from 'react';
 import { cardStyles as styles } from '../../styles/cards';
 import { useNavigate } from 'react-router-dom';
-import { formatCurrency, formatToken } from '../../utils/format';
+import { formatCurrency, formatrupiah } from '../../utils/format';
 import LoanCard from './LoanCard';
 import BayarAngsuranForm from '../Forms/BayarAngsuranForm';
 
-const ActiveLoan = ({ pinjamanAktif, onBayar, isLoading, isPaymentLocked, paymentSuccess, adminConfig }) => {
+const ActiveLoan = ({ pinjamanAktif, onBayar, isLoading, isPaymentLocked, paymentSuccess, paymentType, adminConfig }) => {
   const navigate = useNavigate();
   
   // Perhitungan denda sesuai logika kontrak: (totalHarusDibayar * dendaHarianPermil * overdueDays) / 1000
@@ -23,12 +23,12 @@ const ActiveLoan = ({ pinjamanAktif, onBayar, isLoading, isPaymentLocked, paymen
   }
 
   const sisa = formatCurrency(
-    formatToken(
+    formatrupiah(
         (pinjamanAktif.jumlahHarusDikembalikan - pinjamanAktif.sudahDibayar) + dendaRaw
     )
   );
-  const denda = formatCurrency(formatToken(dendaRaw));
-  const dibayar = formatCurrency(formatToken(pinjamanAktif.sudahDibayar));
+  const denda = formatCurrency(formatrupiah(dendaRaw));
+  const dibayar = formatCurrency(formatrupiah(pinjamanAktif.sudahDibayar));
 
 
   const isOverdue = Date.now() / 1000 > Number(pinjamanAktif.waktuJatuhTempo) && Number(pinjamanAktif.waktuJatuhTempo) !== 0;
@@ -124,6 +124,7 @@ const ActiveLoan = ({ pinjamanAktif, onBayar, isLoading, isPaymentLocked, paymen
         isLoading={isLoading} 
         isPaymentLocked={isPaymentLocked}
         paymentSuccess={paymentSuccess}
+        paymentType={paymentType}
       />
     </>
   );

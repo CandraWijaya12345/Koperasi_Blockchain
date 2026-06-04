@@ -1,10 +1,10 @@
-// components/Forms/RegisterForm.jsx
 import React, { useState, useEffect } from 'react';
+import imageCompression from 'browser-image-compression';
 import { cardStyles as styles } from '../../styles/cards';
 import { formatCurrency } from '../../utils/format';
 import InlineMessage from '../InlineMessage';
 
-const RegisterForm = ({ onRegister, isLoading, isPaymentLocked, paymentSuccess, userAddress, adminConfig }) => {
+const RegisterForm = ({ onRegister, isLoading, isPaymentLocked, paymentSuccess, paymentType, userAddress, adminConfig }) => {
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
     nama: '',
@@ -22,6 +22,8 @@ const RegisterForm = ({ onRegister, isLoading, isPaymentLocked, paymentSuccess, 
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState('');
   const [isError, setIsError] = useState(false);
+  const [ktpPhoto, setKtpPhoto] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(null);
 
   const validateField = (name, value) => {
     let error = "";
@@ -51,8 +53,42 @@ const RegisterForm = ({ onRegister, isLoading, isPaymentLocked, paymentSuccess, 
     setErrors(prev => ({ ...prev, [field]: error }));
   };
 
+  const handleFileChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setLoading(true);
+    setMsg("Mengompres foto...");
+
+    const options = {
+      maxSizeMB: 0.2, // Target 200KB
+      maxWidthOrHeight: 1280,
+      useWebWorker: true,
+      fileType: 'image/webp'
+    };
+
+    try {
+      const compressedFile = await imageCompression(file, options);
+      setKtpPhoto(compressedFile);
+      setPhotoPreview(URL.createObjectURL(compressedFile));
+      setMsg("Foto berhasil dikompres!");
+      setIsError(false);
+      setErrors(prev => ({ ...prev, ktpPhoto: "" }));
+    } catch (error) {
+      console.error("Compression error:", error);
+      setIsError(true);
+      setMsg("Gagal mengompres foto. Silakan coba lagi.");
+    }
+    setLoading(false);
+  };
+
+  const wasLocked = React.useRef(false);
+
   useEffect(() => {
-    if (!isPaymentLocked && msg.includes("Menunggu")) {
+    if (isPaymentLocked && paymentType === 'POKOK') {
+      wasLocked.current = true;
+    } else if (!isPaymentLocked && wasLocked.current) {
+      wasLocked.current = false;
       if (paymentSuccess) {
         setMsg('');
       } else {
@@ -61,7 +97,7 @@ const RegisterForm = ({ onRegister, isLoading, isPaymentLocked, paymentSuccess, 
         setTimeout(() => setMsg(''), 5000);
       }
     }
-  }, [isPaymentLocked, msg, paymentSuccess]);
+  }, [isPaymentLocked, paymentSuccess, paymentType]);
 
   const validateStep = (s) => {
     const stepErrors = {};
@@ -69,6 +105,7 @@ const RegisterForm = ({ onRegister, isLoading, isPaymentLocked, paymentSuccess, 
         if (!formData.nama || errors.nama) stepErrors.nama = errors.nama || "Nama wajib diisi";
         if (!formData.noHP || errors.noHP) stepErrors.noHP = errors.noHP || "No HP wajib diisi";
         if (!formData.noKTP || errors.noKTP) stepErrors.noKTP = errors.noKTP || "NIK wajib diisi";
+        if (!ktpPhoto) stepErrors.ktpPhoto = "Foto KTP wajib diunggah";
     }
     if (s === 2) {
         if (!formData.alamat || errors.alamat) stepErrors.alamat = errors.alamat || "Alamat wajib diisi";
@@ -82,7 +119,46 @@ const RegisterForm = ({ onRegister, isLoading, isPaymentLocked, paymentSuccess, 
     if (Object.keys(stepErrors).length > 0) {
         setErrors(prev => ({ ...prev, ...stepErrors }));
         setIsError(true);
-        setMsg("Mohon lengkapi seluruh data.");
+        const firstErrorKey = Object.keys(stepErrors)[0];
+        setMsg(stepErrors[firstErrorKey]);
+        return false;
+    }
+    return true;
+  };
+
+  const validateAll = () => {
+    const allErrors = {};
+    
+    // Step 1
+    if (!formData.nama || errors.nama) allErrors.nama = errors.nama || "Nama wajib diisi";
+    if (!formData.noHP || errors.noHP) allErrors.noHP = errors.noHP || "No HP wajib diisi";
+    if (!formData.noKTP || errors.noKTP) allErrors.noKTP = errors.noKTP || "NIK wajib diisi";
+    if (!ktpPhoto) allErrors.ktpPhoto = "Foto KTP wajib diunggah";
+
+    // Step 2
+    if (!formData.alamat || errors.alamat) allErrors.alamat = errors.alamat || "Alamat wajib diisi";
+    if (!formData.jobType) allErrors.jobType = "Pekerjaan wajib dipilih";
+    if (formData.jobType === 'Lainnya' && !formData.jobOther) allErrors.jobOther = "Detail wajib diisi";
+
+    // Step 3
+    if (!formData.emergencyName || errors.emergencyName) allErrors.emergencyName = errors.emergencyName || "Nama wajib diisi";
+    if (!formData.emergencyPhone || errors.emergencyPhone) allErrors.emergencyPhone = errors.emergencyPhone || "No HP wajib diisi";
+
+    if (Object.keys(allErrors).length > 0) {
+        setErrors(prev => ({ ...prev, ...allErrors }));
+        setIsError(true);
+        
+        // Direct user back to the first failing step
+        if (allErrors.nama || allErrors.noHP || allErrors.noKTP || allErrors.ktpPhoto) {
+            setStep(1);
+        } else if (allErrors.alamat || allErrors.jobType || allErrors.jobOther) {
+            setStep(2);
+        } else {
+            setStep(3);
+        }
+        
+        const firstErrorKey = Object.keys(allErrors)[0];
+        setMsg(allErrors[firstErrorKey]);
         return false;
     }
     return true;
@@ -98,13 +174,28 @@ const RegisterForm = ({ onRegister, isLoading, isPaymentLocked, paymentSuccess, 
   const prevStep = () => setStep(prev => prev - 1);
 
   const handleSubmit = async () => {
-    if (!validateStep(step)) return;
+    if (!validateAll()) return;
     setLoading(true);
     setMsg('Memproses pendaftaran...');
     setIsError(false);
     try {
       const jobValue = formData.jobType === 'Lainnya' ? formData.jobOther : formData.jobType;
       const emergencyValue = `${formData.emergencyName} (${formData.emergencyPhone})`;
+      
+      // Convert photo to base64 if exists
+      let photoBase64 = null;
+      if (ktpPhoto) {
+        setMsg("Menyiapkan berkas foto...");
+        photoBase64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.onerror = (e) => reject(new Error("Gagal membaca foto KTP"));
+          reader.readAsDataURL(ktpPhoto);
+        });
+      }
+
+      setMsg("Data siap! Memproses pendaftaran...");
+
       const params = {
         user: userAddress,
         nama: formData.nama,
@@ -114,8 +205,10 @@ const RegisterForm = ({ onRegister, isLoading, isPaymentLocked, paymentSuccess, 
         gender: formData.gender,
         job: jobValue,
         emergency: emergencyValue,
-        branchId: parseInt(formData.branchId)
+        branchId: parseInt(formData.branchId),
+        photoBase64: photoBase64 // Dikirim sebagai base64 ke server untuk di-upload setelah pembayaran berhasil
       };
+      
       await onRegister(params, (progressMsg) => setMsg(progressMsg));
     } catch (e) {
       console.error(e);
@@ -141,7 +234,7 @@ const RegisterForm = ({ onRegister, isLoading, isPaymentLocked, paymentSuccess, 
           }}>
             {s}
           </div>
-          <span style={{ fontSize: '11px', fontWeight: '700', color: step >= s ? '#1e3a8a' : '#9ca3af', textTransform: 'uppercase' }}>
+          <span className="stepper-label" style={{ fontWeight: '700', color: step >= s ? '#1e3a8a' : '#9ca3af', textTransform: 'uppercase' }}>
             {s === 1 ? 'Data Diri' : s === 2 ? 'Profil' : 'Konfirmasi'}
           </span>
         </div>
@@ -150,18 +243,81 @@ const RegisterForm = ({ onRegister, isLoading, isPaymentLocked, paymentSuccess, 
   );
 
   return (
-    <section>
+    <section style={{ width: '100%', boxSizing: 'border-box' }}>
       <style>{`
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .form-step { animation: fadeIn 0.4s ease-out forwards; }
+        
+        .register-title {
+          font-size: 1.75rem;
+          font-weight: 800;
+          color: #111827;
+          margin-bottom: 8px;
+        }
+        .register-subtitle {
+          color: #6b7280;
+          font-size: 0.95rem;
+        }
+        .register-card {
+          max-width: 500px;
+          margin: 0 auto;
+          padding: 32px;
+          background-color: #fff;
+          border-radius: 18px;
+          box-shadow: 0 10px 30px rgba(15,23,42,0.06);
+          border: 1px solid #e5e7eb;
+          box-sizing: border-box;
+          width: 100%;
+          transition: all 0.3s ease;
+        }
+        .responsive-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 16px;
+          margin-bottom: 16px;
+          width: 100%;
+        }
+        .stepper-label {
+          font-size: 11px;
+          transition: all 0.3s;
+        }
+        .responsive-btn-group {
+          display: flex;
+          gap: 12px;
+          width: 100%;
+        }
+        
+        @media (max-width: 520px) {
+          .register-card {
+            padding: 20px 16px !important;
+            border-radius: 16px !important;
+            box-shadow: 0 4px 20px rgba(15,23,42,0.04) !important;
+          }
+          .responsive-grid {
+            grid-template-columns: 1fr !important;
+            gap: 12px !important;
+          }
+          .stepper-label {
+            font-size: 9px !important;
+            letter-spacing: -0.5px;
+          }
+          .register-title {
+            font-size: 1.4rem !important;
+          }
+          .register-subtitle {
+            font-size: 0.85rem !important;
+          }
+          .responsive-btn-group {
+            gap: 8px !important;
+          }
+          .responsive-btn-group button {
+            padding: 11px 16px !important;
+            font-size: 14px !important;
+          }
+        }
       `}</style>
 
-      <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-        <h3 style={{ fontSize: '1.75rem', fontWeight: '800', color: '#111827', marginBottom: '8px' }}>Koperasi Kita</h3>
-        <p style={{ color: '#6b7280', fontSize: '0.95rem' }}>Mulai perjalanan finansial masa depan Anda hari ini.</p>
-      </div>
-
-      <div style={{ ...styles.card, maxWidth: '500px', margin: '0 auto', padding: '32px' }}>
+      <div className="register-card">
         {renderStepper()}
         
         {step === 1 && (
@@ -197,7 +353,39 @@ const RegisterForm = ({ onRegister, isLoading, isPaymentLocked, paymentSuccess, 
               />
               {errors.noKTP && <p style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px' }}>{errors.noKTP}</p>}
             </div>
-            <button style={styles.button} onClick={nextStep}>LANJUTKAN</button>
+
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ ...styles.statLabel, display: 'block', marginBottom: '6px', fontWeight: 600 }}>Foto KTP</label>
+              <div style={{ 
+                border: `2px dashed ${errors.ktpPhoto ? '#ef4444' : '#d1d5db'}`, 
+                borderRadius: '12px', 
+                padding: '16px', 
+                textAlign: 'center',
+                backgroundColor: '#f9fafb',
+                cursor: 'pointer'
+              }} onClick={() => document.getElementById('ktpInput').click()}>
+                {photoPreview ? (
+                  <img src={photoPreview} alt="Preview KTP" style={{ maxWidth: '100%', maxHeight: '150px', borderRadius: '8px' }} />
+                ) : (
+                  <div style={{ color: '#9ca3af' }}>
+                    <p style={{ fontSize: '14px', marginBottom: '4px' }}>Klik untuk upload foto KTP</p>
+                    <p style={{ fontSize: '11px' }}>Foto akan dikompres otomatis (Max 200KB)</p>
+                  </div>
+                )}
+                <input 
+                  id="ktpInput" 
+                  type="file" 
+                  accept="image/*" 
+                  style={{ display: 'none' }} 
+                  onChange={handleFileChange} 
+                />
+              </div>
+              {errors.ktpPhoto && <p style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px' }}>{errors.ktpPhoto}</p>}
+            </div>
+
+            <button style={styles.button} onClick={nextStep} disabled={loading}>
+              {loading ? 'MEMPROSES...' : 'LANJUTKAN'}
+            </button>
           </div>
         )}
 
@@ -214,7 +402,7 @@ const RegisterForm = ({ onRegister, isLoading, isPaymentLocked, paymentSuccess, 
               />
               {errors.alamat && <p style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px' }}>{errors.alamat}</p>}
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+            <div className="responsive-grid">
               <div>
                 <label style={{ ...styles.statLabel, display: 'block', marginBottom: '6px', fontWeight: 600 }}>Kelamin</label>
                 <select style={styles.input} value={formData.gender} onChange={(e) => updateField('gender', e.target.value)}>
@@ -238,7 +426,7 @@ const RegisterForm = ({ onRegister, isLoading, isPaymentLocked, paymentSuccess, 
                 <input style={{ ...styles.input, borderColor: errors.jobOther ? '#ef4444' : '#d1d5db' }} value={formData.jobOther} onChange={(e) => updateField('jobOther', e.target.value)} placeholder="Detail pekerjaan" />
               </div>
             )}
-            <div style={{ display: 'flex', gap: '12px' }}>
+            <div className="responsive-btn-group">
               <button style={{ ...styles.button, backgroundColor: '#f3f4f6', color: '#4b5563', boxShadow: 'none' }} onClick={prevStep}>KEMBALI</button>
               <button style={styles.button} onClick={nextStep}>LANJUT</button>
             </div>
@@ -250,13 +438,13 @@ const RegisterForm = ({ onRegister, isLoading, isPaymentLocked, paymentSuccess, 
             <h4 style={{ ...styles.cardTitle, marginBottom: '20px' }}>Review & Kontak Darurat</h4>
             <div style={{ background: '#f9fafb', padding: '16px', borderRadius: '12px', marginBottom: '20px', border: '1px solid #e5e7eb' }}>
               <p style={{ fontSize: '13px', fontWeight: 700, color: '#6b7280', marginBottom: '12px', textTransform: 'uppercase' }}>Kontak Darurat</p>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div className="responsive-grid" style={{ gap: '12px' }}>
                 <div>
                   <label style={{ ...styles.statLabel, fontSize: '11px' }}>Nama</label>
                   <input style={{ ...styles.input, height: '40px', padding: '8px 12px', marginBottom: 0 }} value={formData.emergencyName} onChange={(e) => updateField('emergencyName', e.target.value)} placeholder="Nama" />
                 </div>
                 <div>
-                  <label style={{ ...styles.statLabel, fontSize: '11px' }}>No. HP</label>
+                  <label style={{ ...styles.statLabel, fontSize: '11px' }}>Nomor Handphone</label>
                   <input style={{ ...styles.input, height: '40px', padding: '8px 12px', marginBottom: 0 }} value={formData.emergencyPhone} onChange={(e) => updateField('emergencyPhone', e.target.value)} placeholder="08..." />
                 </div>
               </div>
@@ -268,7 +456,7 @@ const RegisterForm = ({ onRegister, isLoading, isPaymentLocked, paymentSuccess, 
               </div>
               <p style={{ fontSize: '12px', marginTop: '6px', opacity: 0.8 }}>Biaya ini akan disimpan sebagai Simpanan Pokok Anda.</p>
             </div>
-            <div style={{ display: 'flex', gap: '12px' }}>
+            <div className="responsive-btn-group">
               <button style={{ ...styles.button, backgroundColor: '#f3f4f6', color: '#4b5563', boxShadow: 'none' }} onClick={prevStep}>KEMBALI</button>
               <button style={{ ...styles.button, backgroundColor: '#10b981', boxShadow: '0 10px 25px rgba(16,185,129,0.3)' }} onClick={handleSubmit} disabled={isLoading || loading}>
                 {loading ? 'MEMPROSES...' : 'DAFTAR SEKARANG'}

@@ -3,7 +3,7 @@ const { ethers } = require('ethers');
 async function main() {
     const rpcUrl = "https://rpc-amoy.polygon.technology/";
     const provider = new ethers.JsonRpcProvider(rpcUrl);
-    const koperasiAddress = "0xD2530547B22dE9C45fE0AEcd0af421fBB29C6d6f";
+    const koperasiAddress = "0x3BE9a134d553De9841f9FB116FE6B290c78C95d6";
     
     const abi = [
         "function settings() view returns (bool, bool, bool, bool, uint256, uint256, uint256, uint256, uint256, uint256, uint256)"

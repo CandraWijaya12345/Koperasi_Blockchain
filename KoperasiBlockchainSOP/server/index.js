@@ -4,15 +4,20 @@ const express = require('express');
 const cors = require('cors');
 const { ethers } = require('ethers');
 const fs = require('fs');
+const multer = require('multer');
+const { uploadJSONToIPFS, uploadFileToIPFS, uploadDirectoryToIPFS } = require('./utils/ipfs');
+const cryptoUtil = require('./utils/crypto');
 const { Xendit } = require('xendit-node');
 
 const app = express();
+const upload = multer({ storage: multer.memoryStorage() }); // Store files in memory temporarily
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // --- CONFIGURATION ---
 const PORT = process.env.PORT || 5000;
-const RPC_URL = process.env.POLYGON_RPC_URL || 'https://rpc-amoy.polygon.technology/';
+const RPC_URL = process.env.POLYGON_RPC_URL || 'https://polygon-amoy-bor-rpc.publicnode.com/';
 const CONTRACT_ADDRESS = process.env.CONTRACT_ADDRESS;
 const PRIVATE_KEY = process.env.ADMIN_PRIVATE_KEY;
 
@@ -87,10 +92,43 @@ console.log("[CONFIG] Contract Address:", CONTRACT_ADDRESS);
 console.log("[CONFIG] Admin Wallet:", wallet.address);
 console.log("[CONFIG] ---------------------------------------\n");
 
+let currentGasSettings = {
+    maxPriorityFeePerGas: ethers.parseUnits('90', 'gwei'),
+    maxFeePerGas: ethers.parseUnits('400', 'gwei')
+};
+
+// Dynamically track gas fees in background to handle network congestion
+setInterval(async () => {
+    try {
+        const feeData = await provider.getFeeData();
+        let maxPriority = ethers.parseUnits('45', 'gwei');
+        if (feeData.maxPriorityFeePerGas) {
+            const netPriority = feeData.maxPriorityFeePerGas;
+            if (netPriority > maxPriority) {
+                maxPriority = (netPriority * 12n) / 10n; // 20% safety buffer
+            }
+        }
+        let maxFee = ethers.parseUnits('400', 'gwei');
+        if (feeData.maxFeePerGas) {
+            maxFee = (feeData.maxFeePerGas * 15n) / 10n; // 50% safety buffer
+        }
+        currentGasSettings = {
+            maxPriorityFeePerGas: maxPriority,
+            maxFeePerGas: maxFee
+        };
+    } catch (e) {
+        console.warn("[Gas Tracking] Failed to poll network gas price:", e.message);
+    }
+}, 15000).unref();
+
 // [FIX] Polygon Amoy Gas Overrides (Min 25 Gwei Priority Fee needed)
 const GAS_OVERRIDE = {
-    maxPriorityFeePerGas: ethers.parseUnits('35', 'gwei'),
-    maxFeePerGas: ethers.parseUnits('50', 'gwei')
+    get maxPriorityFeePerGas() {
+        return currentGasSettings.maxPriorityFeePerGas;
+    },
+    get maxFeePerGas() {
+        return currentGasSettings.maxFeePerGas;
+    }
 };
 
 // --- UTILITIES ---
@@ -102,11 +140,11 @@ async function checkGasFunds(customAmountWei = 0n) {
     try {
         const balance = await provider.getBalance(wallet.address);
         const threshold = ethers.parseEther("0.05"); // Warn if below 0.05 POL
-        
+
         if (balance < threshold) {
             console.warn(`[WARNING] Low Admin Balance: ${ethers.formatEther(balance)} POL. Please top up soon.`);
         }
-        
+
         if (customAmountWei > 0n && balance < customAmountWei) {
             throw new Error(`INSUFFICIENT_FUNDS: Saldo POL Admin (${ethers.formatEther(balance)}) tidak cukup untuk transaksi.`);
         }
@@ -147,7 +185,7 @@ async function recoverIncompletePayments() {
     console.log("[Recovery] Checking for incomplete payments...");
     const log = getPaymentLog();
     const incomplete = Object.keys(log).filter(id => log[id].status !== 'COMPLETED');
-    
+
     if (incomplete.length === 0) {
         console.log("[Recovery] No incomplete payments found.");
         return;
@@ -189,7 +227,7 @@ async function checkNgrokHealth() {
         const data = await res.json();
         return data.tunnels && data.tunnels.length > 0;
     } catch (e) {
-        return false; 
+        return false;
     }
 }
 
@@ -202,16 +240,16 @@ async function getPublicTunnelUrl() {
             const httpsTunnel = data.tunnels.find(t => t.public_url.startsWith('https'));
             return httpsTunnel ? httpsTunnel.public_url : data.tunnels[0].public_url;
         }
-    } catch (e) {}
+    } catch (e) { }
     return null;
 }
 
 // [NEW] Ultimate Webhook Automation (Proactive Push)
-let lastSyncedUrl = ""; 
+let lastSyncedUrl = "";
 
 async function syncXenditWebhooks(publicUrl) {
     if (!publicUrl || publicUrl === lastSyncedUrl) return true;
-    
+
     try {
         const auth = Buffer.from(`${process.env.XENDIT_SECRET_KEY}:`).toString('base64');
         const features = [
@@ -226,13 +264,13 @@ async function syncXenditWebhooks(publicUrl) {
             console.log(`[Webhook Sync] Target for ${feature.id}: ${targetUrl}`);
             const res = await fetch(`https://api.xendit.co/callback_urls/${feature.id}`, {
                 method: 'POST',
-                headers: { 
+                headers: {
                     'Authorization': `Basic ${auth}`,
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({ url: targetUrl })
             });
-            
+
             // [SAFE FETCH] Handle potential non-JSON or error responses
             const text = await res.text();
             let data = {};
@@ -256,7 +294,7 @@ async function syncXenditWebhooks(publicUrl) {
 // Health Check Logic
 async function checkXenditHealth() {
     const status = { xendit: 'OFFLINE', tunnel: 'OFFLINE', webhookMismatch: false, currentUrl: "" };
-    
+
     // 1. Check NGrok Tunnel
     const ngrokActive = await checkNgrokHealth();
     if (ngrokActive) {
@@ -292,8 +330,8 @@ app.get('/api/health', async (req, res) => {
         try {
             const balWei = await provider.getBalance(wallet.address);
             walletBalance = ethers.formatEther(balWei);
-        } catch (e) {}
-        
+        } catch (e) { }
+
         res.json({
             ...status,
             blockchain: 'ONLINE',
@@ -398,10 +436,15 @@ app.post('/api/payment/repay', async (req, res) => {
 });
 
 // 2. Webhook: Xendit Callback (Invoice Paid)
-app.post('/api/xendit-callback', async (req, res) => {
+app.post('/api/xendit-callback', (req, res) => {
     const data = req.body;
     console.log("Xendit Webhook Received:", data.status, data.external_id);
-    await processPaymentLogics(data);
+    
+    // Process asynchronously in background so webhook returns immediately and doesn't timeout/retry
+    processPaymentLogics(data).catch(err => {
+        console.error("Error in background payment logics processing:", err.message);
+    });
+    
     res.status(200).json({ status: 'OK' });
 });
 
@@ -410,12 +453,33 @@ app.get('/api/payment/verify/:externalId', async (req, res) => {
     const { externalId } = req.params;
     try {
         console.log(`Manual verification requested for: ${externalId}`);
-        const response = await Invoice.getInvoice({ invoiceId: externalId });
-        // NOTE: xendit-node might use invoiceId or you might need a different list call for external_id
-        // Using getInvoice based on ID if available, otherwise just check status logic
-        
+        let response = null;
+
+        if (externalId.startsWith('TRX-') || externalId.startsWith('REPAY-')) {
+            const invoices = await Invoice.getInvoices({ externalId: externalId });
+            if (invoices && invoices.length > 0) {
+                response = invoices[0];
+            }
+        } else {
+            response = await Invoice.getInvoiceById({ invoiceId: externalId });
+        }
+
+        if (!response) {
+            console.log(`Invoice not found for ID: ${externalId}`);
+            return res.json({ success: false, status: 'NOT_FOUND' });
+        }
+
+        console.log(`Invoice status for ${externalId}: ${response.status}`);
+
         if (response.status === 'PAID' || response.status === 'SETTLED') {
-            await processPaymentLogics(response);
+            const mappedPayload = {
+                id: response.id,
+                external_id: response.externalId,
+                status: response.status,
+                amount: response.amount,
+                description: response.description
+            };
+            await processPaymentLogics(mappedPayload);
             return res.json({ success: true, status: response.status });
         }
         res.json({ success: false, status: response.status });
@@ -438,7 +502,7 @@ async function processPaymentLogics(data) {
             }
 
             // PRE-CHECK: Gas Funds
-            await checkGasFunds(); 
+            await checkGasFunds();
 
             const description = data.description || "";
             const parts = description.split(' - ');
@@ -474,24 +538,109 @@ async function processPaymentLogics(data) {
                     if (isPokok) {
                         // Check if registration already done in a previous (interrupted) run
                         const currentStatus = (log[externalId] || {}).status;
-                        
+
                         if (currentStatus !== 'REG_DONE' && currentStatus !== 'POLLING_ACTIVE') {
                             const pendingParams = getPendingReg(userAddress);
                             if (pendingParams) {
-                                console.log(`[Webhook] Found pending registration for ${userAddress}. Executing blockchain registry...`);
-                                const mappedParamsArr = [
-                                    pendingParams.user,
-                                    pendingParams.nama || "Tanpa Nama",
-                                    pendingParams.noHP || "-",
-                                    pendingParams.noKTP || "-",
-                                    pendingParams.alamat || "-",
-                                    pendingParams.gender || pendingParams.jenisKelamin || "-",
-                                    pendingParams.job || pendingParams.pekerjaan || "-",
-                                    pendingParams.emergency || pendingParams.kontakDarurat || "-",
-                                    BigInt(pendingParams.branchId || pendingParams.branchID || 1)
-                                ];
-
+                                console.log(`[Webhook] Found pending registration for ${userAddress}. Preparing registry...`);
+                                
                                 try {
+                                    const useIPFSMode = await contract.useIPFSStorage();
+                                    let jsonHash = "";
+                                    
+                                    if (useIPFSMode) {
+                                        console.log(`[Webhook IPFS] IPFS Storage Mode is ACTIVE. Uploading ENCRYPTED data for ${pendingParams.nama} to IPFS directory...`);
+                                        
+                                        const filesList = [];
+                                        const userAddressLower = userAddress.toLowerCase();
+                                        const cleanNama = pendingParams.nama ? pendingParams.nama.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').trim() : 'tanpa_nama';
+                                        const dateStr = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
+                                        const customFolderName = `${cleanNama}_${dateStr}_${userAddressLower}`;
+                                        
+                                        let photoPathRelative = null;
+                                        
+                                        if (pendingParams.photoBase64) {
+                                            try {
+                                                const matches = pendingParams.photoBase64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+                                                if (matches && matches.length === 3) {
+                                                    const fileBuffer = Buffer.from(matches[2], 'base64');
+                                                    // [ENCRYPT] Encrypt KTP image buffer
+                                                    const encryptedBuffer = cryptoUtil.encryptBuffer(fileBuffer);
+                                                    
+                                                    photoPathRelative = `${customFolderName}/ktp_photo`;
+                                                    
+                                                    filesList.push({
+                                                        buffer: encryptedBuffer,
+                                                        filepath: `koperasi_anggota/${customFolderName}/ktp_photo`
+                                                    });
+                                                    console.log(`[Webhook IPFS] Encrypted KTP Photo added to directory list`);
+                                                }
+                                            } catch (err) {
+                                                console.error("[Webhook IPFS] KTP Photo prep failed:", err.message);
+                                            }
+                                        }
+                                        
+                                        const ipfsPayload = {
+                                            nama: pendingParams.nama,
+                                            noHP: pendingParams.noHP,
+                                            noKTP: pendingParams.noKTP,
+                                            alamat: pendingParams.alamat,
+                                            gender: pendingParams.gender,
+                                            job: pendingParams.job,
+                                            emergency: pendingParams.emergency,
+                                            photoHash: photoPathRelative,
+                                            timestamp: new Date().toISOString()
+                                        };
+                                        
+                                        // [ENCRYPT] Encrypt entire identity JSON payload
+                                        const encryptedJsonText = cryptoUtil.encryptText(JSON.stringify(ipfsPayload, null, 2));
+                                        const jsonBuffer = Buffer.from(encryptedJsonText);
+                                        
+                                        filesList.push({
+                                            buffer: jsonBuffer,
+                                            filepath: `koperasi_anggota/${customFolderName}/identity.json`
+                                        });
+                                        
+                                        console.log(`[Webhook IPFS] Uploading encrypted directory for ${pendingParams.nama} to IPFS...`);
+                                        jsonHash = await uploadDirectoryToIPFS(filesList);
+                                        console.log(`[Webhook IPFS] Root Folder CID: ${jsonHash}`);
+                                    } else {
+                                        console.log(`[Webhook] ON-CHAIN Storage Mode is ACTIVE. Uploading ENCRYPTED KTP photo to IPFS...`);
+                                        
+                                        if (pendingParams.photoBase64) {
+                                            try {
+                                                const matches = pendingParams.photoBase64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+                                                if (matches && matches.length === 3) {
+                                                    const fileBuffer = Buffer.from(matches[2], 'base64');
+                                                    const userAddressLower = userAddress.toLowerCase();
+                                                    // [ENCRYPT] Encrypt KTP image buffer
+                                                    const encryptedBuffer = cryptoUtil.encryptBuffer(fileBuffer);
+                                                    
+                                                    const filesList = [{
+                                                        buffer: encryptedBuffer,
+                                                        filepath: `koperasi_ktp/ktp_${userAddressLower}`
+                                                    }];
+                                                    
+                                                    console.log(`[Webhook On-Chain] Uploading encrypted KTP Photo to IPFS...`);
+                                                    jsonHash = await uploadDirectoryToIPFS(filesList);
+                                                    console.log(`[Webhook On-Chain] Root Folder CID for encrypted photo: ${jsonHash}`);
+                                                }
+                                            } catch (err) {
+                                                console.error("[Webhook On-Chain] KTP Photo upload failed:", err.message);
+                                            }
+                                        }
+                                    }
+                                    
+                                    // [ENCRYPT] Encrypt member name stored directly on the blockchain
+                                    const encryptedNameOnChain = cryptoUtil.encryptText(pendingParams.nama || "Tanpa Nama");
+                                    
+                                    const mappedParamsArr = [
+                                        pendingParams.user,
+                                        encryptedNameOnChain,
+                                        jsonHash,
+                                        BigInt(pendingParams.branchId || pendingParams.branchID || 1)
+                                    ];
+                                    
                                     const regTx = await contract.registerMember(mappedParamsArr, GAS_OVERRIDE);
                                     await regTx.wait();
                                     console.log(`[Webhook] Blockchain Registration SUCCESS for ${userAddress}`);
@@ -500,10 +649,11 @@ async function processPaymentLogics(data) {
                                 } catch (regErr) {
                                     if (regErr.message.includes("sudah terdaftar")) {
                                         console.log(`[Webhook] User ${userAddress} already registered on-chain.`);
+                                        removePendingReg(userAddress);
                                         updatePaymentStatus(externalId, 'REG_DONE');
                                     } else {
                                         console.error(`[Webhook] Registration FAILED:`, regErr.message);
-                                        // We don't mark as COMPLETED, so it stays in PROCESSING/RECOVERY
+                                        // Tetap dalam antrean untuk dicoba kembali
                                     }
                                 }
                             } else {
@@ -515,7 +665,7 @@ async function processPaymentLogics(data) {
                         // Polling for Activation
                         console.log(`[Webhook] Waiting for ${userAddress} to become ACTIVE on blockchain...`);
                         updatePaymentStatus(externalId, 'POLLING_ACTIVE');
-                        
+
                         let isRegistered = false;
                         let pollAttempts = 0;
                         const maxPolls = 25; // Increased polls for UAT Safety (125s window)
@@ -571,8 +721,8 @@ async function processPaymentLogics(data) {
 // 2b. Webhook: Xendit Disbursement Callback (Payout Status)
 // NOTE: Set this URL in Xendit Dashboard > Settings > Callbacks > Money Out
 app.post('/api/xendit-disbursement-callback', async (req, res) => {
-    const callbackToken = req.headers['x-callback-token'];
-    // In production, verify callbackToken
+    const callbackrupiah = req.headers['x-callback-rupiah'];
+    // In production, verify callbackrupiah
 
     const data = req.body;
     console.log("Xendit Disbursement Webhook:", data.status, data.external_id);
@@ -626,7 +776,7 @@ app.post('/api/loan/approve-disburse', async (req, res) => {
 
     try {
         // [CRITICAL PRE-FLIGHT] Check Xendit Connectivity BEFORE Blockchain Approval
-        // This prevents "Burned IDRT but failed Fiat Payout" scenarios
+        // This prevents "Burned IDR but failed Fiat Payout" scenarios
         await checkXenditHealth();
 
         console.log(`Approving Loan #${loanId} for ${userAddress}...`);
@@ -634,8 +784,8 @@ app.post('/api/loan/approve-disburse', async (req, res) => {
         // PRE-CHECK: Check POL Balance for Gas
         const gasBal = await provider.getBalance(wallet.address);
         if (gasBal < ethers.parseEther("0.005")) { // Minimum 0.005 POL for a safe tx
-             return res.status(400).json({ 
-                error: `GAS_ERROR: Saldo POL Admin Kurang! Saldo: ${ethers.formatEther(gasBal)} POL. Butuh minimal 0.005 POL agar aman.` 
+            return res.status(400).json({
+                error: `GAS_ERROR: Saldo POL Admin Kurang! Saldo: ${ethers.formatEther(gasBal)} POL. Butuh minimal 0.005 POL agar aman.`
             });
         }
 
@@ -668,7 +818,7 @@ app.post('/api/loan/approve-disburse', async (req, res) => {
             const provisiFee = (finalAmount * feeProvisiRate) / 100;
             const resikoFee = (finalAmount * feeResikoRate) / 100;
             const totalFees = adminFee + provisiFee + resikoFee;
-            
+
             finalAmount = finalAmount - totalFees;
             feeBreakdownStr = `Deducted Upfront: Admin(${adminFee}), Provisi(${provisiFee}), Resiko(${resikoFee})`;
         }
@@ -686,7 +836,7 @@ app.post('/api/loan/approve-disburse', async (req, res) => {
                 referenceId: externalId,
                 channelCode: channelCode,
                 channelProperties: {
-                    accountHolderName: details.accountHolderName || 'Anggota Koperasi', 
+                    accountHolderName: details.accountHolderName || 'Anggota Koperasi',
                     accountNumber: details.accountNumber,
                 },
                 amount: Math.floor(finalAmount), // Ensure integer for Xendit
@@ -719,9 +869,9 @@ app.post('/api/admin/close-membership', async (req, res) => {
     const { memberAddress } = req.body;
     try {
         console.log(`[Admin] Closing Membership for: ${memberAddress}`);
-        const tx = await contract.tutupKeanggotaan(memberAddress, { 
-            maxPriorityFeePerGas: ethers.parseUnits('30', 'gwei'), 
-            maxFeePerGas: ethers.parseUnits('45', 'gwei') 
+        const tx = await contract.tutupKeanggotaan(memberAddress, {
+            maxPriorityFeePerGas: ethers.parseUnits('30', 'gwei'),
+            maxFeePerGas: ethers.parseUnits('45', 'gwei')
         });
         console.log(`[Admin] Tx Sent: ${tx.hash}`);
         await tx.wait();
@@ -736,23 +886,72 @@ app.post('/api/admin/close-membership', async (req, res) => {
 app.post('/api/register', async (req, res) => {
     const { params } = req.body;
     try {
-        console.log(`\n[Registration] --- QUEUING PROCESS for: ${params.user} ---`);
-        
+        console.log(`\n[Registration] --- QUEUING PROCESS for: ${params ? params.user : 'unknown'} ---`);
+
+        if (!params) throw new Error("Payload pendaftaran tidak ditemukan");
         if (!params.user) throw new Error("Alamat user (address) tidak ditemukan dalam payload");
+        if (!params.nama || params.nama.trim().length < 3) throw new Error("Nama lengkap minimal 3 karakter");
+        if (!params.noHP || !/^08[0-9]{8,11}$/.test(params.noHP)) throw new Error("Nomor WhatsApp tidak valid (harus diawali 08...)");
+        if (!params.noKTP || params.noKTP.length !== 16) throw new Error("NIK harus tepat 16 digit");
+        if (!params.photoBase64) throw new Error("Foto KTP wajib diunggah");
+        if (!params.alamat || params.alamat.trim().length < 10) throw new Error("Alamat minimal 10 karakter");
+        if (!params.gender) throw new Error("Jenis kelamin wajib diisi");
+        if (!params.job || params.job.trim() === "") throw new Error("Pekerjaan wajib diisi");
+        if (!params.emergency || params.emergency.trim() === "") throw new Error("Kontak darurat wajib diisi");
 
         // [BARU] Jangan panggil blockchain di sini!
-        // Simpan saja di antrean pending. Pendaftaran blockchain dilakuan setelal bayar Simpanan Pokok via Webhook.
+        // Simpan saja di antrean pending. Pendaftaran blockchain dilakukan setelah bayar Simpanan Pokok via Webhook.
         savePendingReg(params.user, params);
-        
+
         console.log(`[Registration] User ${params.user} queued. Waiting for payment...`);
-        
-        res.json({ 
-            success: true, 
+
+        res.json({
+            success: true,
             message: "Data pendaftaran tersimpan. Silahkan selesaikan pembayaran untuk aktivasi akun.",
-            isQueued: true 
+            isQueued: true
         });
     } catch (error) {
         console.error("[Registration] ERROR:", error.message);
+        res.status(400).json({ error: error.message });
+    }
+});
+
+// 3a. IPFS: Upload Registration Data & Photo
+app.post('/api/ipfs/upload', upload.single('ktpPhoto'), async (req, res) => {
+    try {
+        const { userData } = req.body; // Ini adalah string JSON
+        const parsedData = JSON.parse(userData);
+        let photoHash = null;
+
+        console.log(`[IPFS] Processing upload for: ${parsedData.nama}`);
+
+        // 1. Upload Photo if exists
+        if (req.file) {
+            const safeName = parsedData.nama.replace(/\s+/g, '_');
+            console.log(`[IPFS] Uploading KTP Photo for ${parsedData.nama}...`);
+            photoHash = await uploadFileToIPFS(req.file.buffer, `KTP_${safeName}_${Date.now()}.webp`);
+            console.log(`[IPFS] Photo Hash: ${photoHash}`);
+        }
+
+        // 2. Prepare JSON for IPFS
+        const ipfsPayload = {
+            ...parsedData,
+            photoHash: photoHash,
+            timestamp: new Date().toISOString()
+        };
+
+        // 3. Upload JSON to IPFS
+        console.log(`[IPFS] Uploading JSON Metadata for ${parsedData.nama}...`);
+        const jsonHash = await uploadJSONToIPFS(ipfsPayload, `Identity_${parsedData.nama}_${Date.now()}.json`);
+        console.log(`[IPFS] Metadata Hash: ${jsonHash}`);
+
+        res.json({
+            success: true,
+            jsonHash: jsonHash,
+            photoHash: photoHash
+        });
+    } catch (error) {
+        console.error("[IPFS] Upload Error:", error.message);
         res.status(500).json({ error: error.message });
     }
 });
@@ -765,57 +964,101 @@ app.post('/api/gov/update-settings', async (req, res) => {
         console.log("--------------------------------------------------");
         console.log("[Admin] DIAGNOSTIC: Incoming Payload:", JSON.stringify(req.body));
         const { params: newSettings } = req.body;
-        
+
         if (!newSettings) {
             console.error("[Admin] ERROR: req.body.params is UNDEFINED. Check frontend payload construction.");
             return res.status(400).json({ error: "Payload params missing" });
         }
 
+        const inputWajib = newSettings.wajib !== undefined ? newSettings.wajib : newSettings.adm;
+
         // 1. Fetch current settings (Source of Truth)
         console.log("[Admin] Fetching current settings (Source of Truth)...");
         const current = await contract.settings();
-        
+
         // 2. Build explicit array-based struct for updateGlobalSettings (order must match Solidity)
         // 0:autoColl, 1:multiBranch, 2:deductUpfront, 3:closePeriod, 
         // 4:pokok (Wei), 5:adm (Wei), 6:minSaldo (Wei), 7:feeAdmin (Wei), 
         // 8:feeProvisi (%), 9:feeResiko (%)
-        const pArray = [
-            newSettings.autoColl !== undefined ? !!newSettings.autoColl : (current[0] ?? current.autoCollectibility),
-            newSettings.multiBranch !== undefined ? !!newSettings.multiBranch : (current[1] ?? current.multiBranchEnabled),
-            newSettings.deductUpfront !== undefined ? !!newSettings.deductUpfront : (current[2] ?? current.deductFeesUpfront),
-            newSettings.closePeriod !== undefined ? !!newSettings.closePeriod : (current[3] ?? current.isPeriodClosed),
-            (newSettings.pokok !== undefined && newSettings.pokok !== "") ? ethers.parseUnits(newSettings.pokok.toString(), 18) : (current[4] ?? current.nominalSimpananPokok),
-            (newSettings.adm !== undefined && newSettings.adm !== "") ? ethers.parseUnits(newSettings.adm.toString(), 18) : (current[5] ?? current.nominalAdmPendaftaran),
-            (newSettings.minSaldo !== undefined && newSettings.minSaldo !== "") ? ethers.parseUnits(newSettings.minSaldo.toString(), 18) : (current[6] ?? current.minSaldo),
-            (newSettings.feeAdmin !== undefined && newSettings.feeAdmin !== "") ? ethers.parseUnits(newSettings.feeAdmin.toString(), 18) : (current[7] ?? current.feeAdministrasi),
-            newSettings.feeProvisi !== undefined ? BigInt(newSettings.feeProvisi) : (current[8] ?? current.feeProvisiPersen),
-            newSettings.feeResiko !== undefined ? BigInt(newSettings.feeResiko) : (current[9] ?? current.feeResikoPersen)
-        ];
-
-        console.log("[Admin] CALCULATED ARRAY FOR BLOCKCHAIN:", pArray.map(p => p.toString()));
-
+        // 2. Build tasks based on differences
         const tasks = [];
-        tasks.push({ 
-            name: "Global Settings (Pokok/Adm)", 
-            fn: () => contract.updateGlobalSettings(pArray, GAS_OVERRIDE) 
-        });
+
+        // Check if Global Settings need update
+        const needsGlobalUpdate = 
+            (newSettings.autoColl !== undefined && !!newSettings.autoColl !== (current[0] ?? current.autoCollectibility)) ||
+            (newSettings.multiBranch !== undefined && !!newSettings.multiBranch !== (current[1] ?? current.multiBranchEnabled)) ||
+            (newSettings.deductUpfront !== undefined && !!newSettings.deductUpfront !== (current[2] ?? current.deductFeesUpfront)) ||
+            (newSettings.closePeriod !== undefined && !!newSettings.closePeriod !== (current[3] ?? current.isPeriodClosed)) ||
+            (newSettings.pokok !== undefined && newSettings.pokok !== "" && ethers.parseUnits(newSettings.pokok.toString(), 18) !== (current[4] ?? current.nominalSimpananPokok)) ||
+            (inputWajib !== undefined && inputWajib !== "" && ethers.parseUnits(inputWajib.toString(), 18) !== (current[5] ?? current.nominalAdmPendaftaran)) ||
+            (newSettings.minSaldo !== undefined && newSettings.minSaldo !== "" && ethers.parseUnits(newSettings.minSaldo.toString(), 18) !== (current[6] ?? current.minSaldo)) ||
+            (newSettings.feeAdmin !== undefined && newSettings.feeAdmin !== "" && ethers.parseUnits(newSettings.feeAdmin.toString(), 18) !== (current[7] ?? current.feeAdministrasi)) ||
+            (newSettings.feeProvisi !== undefined && BigInt(newSettings.feeProvisi) !== (current[8] ?? current.feeProvisiPersen)) ||
+            (newSettings.feeResiko !== undefined && BigInt(newSettings.feeResiko) !== (current[9] ?? current.feeResikoPersen));
+
+        if (needsGlobalUpdate) {
+            const pArray = [
+                newSettings.autoColl !== undefined ? !!newSettings.autoColl : (current[0] ?? current.autoCollectibility),
+                newSettings.multiBranch !== undefined ? !!newSettings.multiBranch : (current[1] ?? current.multiBranchEnabled),
+                newSettings.deductUpfront !== undefined ? !!newSettings.deductUpfront : (current[2] ?? current.deductFeesUpfront),
+                newSettings.closePeriod !== undefined ? !!newSettings.closePeriod : (current[3] ?? current.isPeriodClosed),
+                (newSettings.pokok !== undefined && newSettings.pokok !== "") ? ethers.parseUnits(newSettings.pokok.toString(), 18) : (current[4] ?? current.nominalSimpananPokok),
+                (inputWajib !== undefined && inputWajib !== "") ? ethers.parseUnits(inputWajib.toString(), 18) : (current[5] ?? current.nominalAdmPendaftaran),
+                (newSettings.minSaldo !== undefined && newSettings.minSaldo !== "") ? ethers.parseUnits(newSettings.minSaldo.toString(), 18) : (current[6] ?? current.minSaldo),
+                (newSettings.feeAdmin !== undefined && newSettings.feeAdmin !== "") ? ethers.parseUnits(newSettings.feeAdmin.toString(), 18) : (current[7] ?? current.feeAdministrasi),
+                newSettings.feeProvisi !== undefined ? BigInt(newSettings.feeProvisi) : (current[8] ?? current.feeProvisiPersen),
+                newSettings.feeResiko !== undefined ? BigInt(newSettings.feeResiko) : (current[9] ?? current.feeResikoPersen)
+            ];
+            tasks.push({
+                name: "Global Settings (Struktur Biaya & Limit)",
+                fn: () => contract.updateGlobalSettings(pArray, GAS_OVERRIDE)
+            });
+        }
 
         // --- TASK B: setBungaSimpanan ---
         if (newSettings.bungaSimpanan !== undefined) {
+            const currentBunga = await contract.bungaSimpananTahunanPersen();
+            const rawVal = newSettings.bungaSimpanan.toString();
+            if (rawVal.includes('.') || rawVal.includes(',')) {
+                return res.status(400).json({ error: "Bunga Simpanan harus angka bulat" });
+            }
             const val = parseInt(newSettings.bungaSimpanan);
-            if (val <= 9) tasks.push({ name: "Bunga Simpanan", fn: () => contract.setBungaSimpanan(val, GAS_OVERRIDE) });
+            if (val !== Number(currentBunga)) {
+                if (val > 9) return res.status(400).json({ error: "Bunga Simpanan melebihi batas Permenkop (Maks 9%)" });
+                tasks.push({ name: "Bunga Simpanan", fn: () => contract.setBungaSimpanan(val, GAS_OVERRIDE) });
+            }
         }
 
         // --- TASK C: setBungaPinjaman ---
         if (newSettings.bungaPinjaman !== undefined) {
+            const currentBungaP = await contract.bungaPinjamanTahunanPersen();
+            const rawVal = newSettings.bungaPinjaman.toString();
+            if (rawVal.includes('.') || rawVal.includes(',')) {
+                return res.status(400).json({ error: "Bunga Pinjaman harus angka bulat" });
+            }
             const val = parseInt(newSettings.bungaPinjaman);
-            if (val <= 24) tasks.push({ name: "Bunga Pinjaman", fn: () => contract.setBungaPinjaman(val, GAS_OVERRIDE) });
+            if (val !== Number(currentBungaP)) {
+                if (val > 24) return res.status(400).json({ error: "Bunga Pinjaman melebihi batas wajar (Maks 24% p.a)" });
+                tasks.push({ name: "Bunga Pinjaman", fn: () => contract.setBungaPinjaman(val, GAS_OVERRIDE) });
+            }
         }
 
         // --- TASK D: setDendaHarian ---
         if (newSettings.dendaHarian !== undefined) {
+            const currentDenda = await contract.dendaHarianPermil();
+            const rawVal = newSettings.dendaHarian.toString();
+            if (rawVal.includes('.') || rawVal.includes(',')) {
+                return res.status(400).json({ error: "Denda harus angka bulat" });
+            }
             const val = parseInt(newSettings.dendaHarian);
-            if (val <= 10) tasks.push({ name: "Denda Harian", fn: () => contract.setDendaHarian(val, GAS_OVERRIDE) });
+            if (val !== Number(currentDenda)) {
+                if (val > 10) return res.status(400).json({ error: "Denda melebihi batas wajar (Maks 10permil/1% per hari)" });
+                tasks.push({ name: "Denda Harian", fn: () => contract.setDendaHarian(val, GAS_OVERRIDE) });
+            }
+        }
+
+        if (tasks.length === 0) {
+            return res.json({ success: true, message: "No changes detected", executedCount: 0 });
         }
 
         console.log(`[Admin] Starting sequential execution of ${tasks.length} tasks...`);
@@ -830,7 +1073,7 @@ app.post('/api/gov/update-settings', async (req, res) => {
                 count++;
             } catch (taskErr) {
                 console.error(`[Admin] Error in ${task.name}:`, taskErr.message);
-                // Continue to next task even if one fails (unless it's a fatal provider error)
+                throw new Error(`Gagal pada tahap ${task.name}: ${taskErr.message}`);
             }
         }
 
@@ -975,12 +1218,12 @@ app.post('/api/withdraw', async (req, res) => {
         } catch (xenditErr) {
             console.error("Xendit Payout Failed:", xenditErr.message);
             // Return error to user so they know payout failed
-            // In demo, we might want to continue to burn token?
+            // In demo, we might want to continue to burn rupiah?
             // But for Xendit migration, let's be strict.
             return res.status(400).json({ error: "Gagal memproses Payout Xendit: " + xenditErr.message });
         }
 
-        // 2. Burn Tokens on Blockchain
+        // 2. Burn rupiahs on Blockchain
         const amountWei = ethers.parseUnits(amount.toString(), 18);
         const tx = await contract.recordWithdrawal(userAddress, amountWei, GAS_OVERRIDE);
         console.log("Burn Tx Sent:", tx.hash);
@@ -1004,17 +1247,17 @@ app.get('/api/balance', async (req, res) => {
     try {
         // Parallel fetch for speed
         const xRes = await Balance.getBalance({ accountType: 'CASH' });
-        const tokenAddr = await contract.idrToken();
-        const token = new ethers.Contract(tokenAddr, ['function balanceOf(address) view returns (uint256)'], wallet);
-        
+        const idrAddr = await contract.saldoIDR();
+        const idr = new ethers.Contract(idrAddr, ['function balanceOf(address) view returns (uint256)'], wallet);
+
         const [cBal, polBal] = await Promise.all([
-            token.balanceOf(CONTRACT_ADDRESS),
+            idr.balanceOf(CONTRACT_ADDRESS),
             provider.getBalance(wallet.address)
         ]);
 
         res.json({
             success: true,
-            balance: xRes.balance, 
+            balance: xRes.balance,
             xenditBalance: xRes.balance,
             contractBalance: cBal.toString(),
             adminPolBalance: ethers.formatEther(polBal)
@@ -1036,14 +1279,14 @@ async function runAutoSync() {
         // 1. Get Xendit Balance and convert to WEI (18 decimals)
         const xResRaw = await Balance.getBalance({ accountType: 'CASH' });
         // Ensure we handle different possible response formats from xendit-node
-        const xBalanceFiat = Math.floor(xResRaw.balance || xResRaw[0]?.balance || 0); 
+        const xBalanceFiat = Math.floor(xResRaw.balance || xResRaw[0]?.balance || 0);
         const xBalanceWei = ethers.parseUnits(xBalanceFiat.toString(), 18);
 
         // 2. Get Contract Balance (This is already in WEI)
         // We check balance of the KOPERASI CONTRACT ADDRESS itself (The Reserve)
-        const cBalance = await contract.idrToken().then(tokenAddr => {
-            const token = new ethers.Contract(tokenAddr, ['function balanceOf(address) view returns (uint256)'], wallet);
-            return token.balanceOf(CONTRACT_ADDRESS);
+        const cBalance = await contract.saldoIDR().then(idrAddr => {
+            const idr = new ethers.Contract(idrAddr, ['function balanceOf(address) view returns (uint256)'], wallet);
+            return idr.balanceOf(CONTRACT_ADDRESS);
         });
 
         const diff = xBalanceWei - cBalance;
@@ -1057,17 +1300,12 @@ async function runAutoSync() {
                 try {
                     console.log("[AutoSync] Registering Koperasi Reserve Account...");
                     // Use a tuple-like object and ensure branchId is BigInt
-                    const txReg = await contract.registerMember({
-                        user: CONTRACT_ADDRESS,
-                        nama: "KOPERASI RESERVE",
-                        noHP: "SYSTEM",
-                        noKTP: "SYSTEM",
-                        alamat: "SYSTEM",
-                        gender: "SYSTEM",
-                        job: "SYSTEM",
-                        emergency: "SYSTEM",
-                        branchId: 0n // Use BigInt explicitly
-                    }, GAS_OVERRIDE);
+                    const txReg = await contract.registerMember([
+                        CONTRACT_ADDRESS,
+                        "KOPERASI RESERVE",
+                        "SYSTEM", // ProfileHash placeholder for system account
+                        0n
+                    ], GAS_OVERRIDE);
                     await txReg.wait();
                     console.log("[AutoSync] Reserve Account Registered Successfully.");
                 } catch (regErr) {
@@ -1077,7 +1315,7 @@ async function runAutoSync() {
             }
 
             // 4. Mint Difference via recordDeposit
-            // This mints tokens to CONTRACT_ADDRESS
+            // This mints rupiahs to CONTRACT_ADDRESS
             const tx = await contract.recordDeposit(CONTRACT_ADDRESS, diff, false, GAS_OVERRIDE);
             await tx.wait();
             console.log(`[AutoSync] Success! Minted ${diff.toString()} to Reserve.`);
@@ -1111,19 +1349,173 @@ app.post('/api/sync-liquidity', async (req, res) => {
 // Debug Endpoint
 app.get('/api/debug/liquidity', async (req, res) => {
     try {
-        const tokenAddr = await contract.idrToken();
-        const token = new ethers.Contract(tokenAddr, ['function balanceOf(address) view returns (uint256)'], wallet);
-        const bal = await token.balanceOf(CONTRACT_ADDRESS);
+        const idrAddr = await contract.saldoIDR();
+        const idr = new ethers.Contract(idrAddr, ['function balanceOf(address) view returns (uint256)'], wallet);
+        const bal = await idr.balanceOf(CONTRACT_ADDRESS);
         const member = await contract.dataAnggota(CONTRACT_ADDRESS);
 
         res.json({
             contractAddress: CONTRACT_ADDRESS,
-            tokenAddress: tokenAddr,
-            balanceIDRT: bal.toString(),
+            idrAddress: idrAddr,
+            balanceIDR: bal.toString(),
             isMember: member.terdaftar,
             simpananWajib: member.simpananWajib.toString()
         });
     } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// --- SECURE DECRYPTION ENDPOINTS ---
+
+// 1. Decrypt Text (Utility)
+app.post('/api/crypto/decrypt', (req, res) => {
+    const { text } = req.body;
+    try {
+        const decrypted = cryptoUtil.decryptText(text);
+        res.json({ success: true, decrypted });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// 2. Fetch and Decrypt IPFS Metadata
+app.get('/api/ipfs/metadata/:hash/:address', async (req, res) => {
+    const { hash, address } = req.params;
+    try {
+        const directUrl = `https://ipfs.io/ipfs/${hash}`;
+        const response = await fetch(directUrl);
+        if (!response.ok) {
+            return res.status(404).json({ error: "Failed to fetch from IPFS" });
+        }
+
+        const text = await response.text();
+        let metadataText = text;
+
+        if (text.includes('<!DOCTYPE html>') || text.includes('<html')) {
+            const userAddressLower = address.toLowerCase();
+            let possibleUrls = [];
+            const regex = new RegExp(`([^"'/\\s]+_${userAddressLower})`, 'i');
+            
+            // Default folder fallback
+            const match = text.match(regex);
+            let folderName = match && match[1] ? match[1] : `anggota_${userAddressLower}`;
+            
+            // Scenario 1: Folder contains "koperasi_anggota" subfolder (IPFS Storage Mode)
+            if (text.includes('koperasi_anggota')) {
+                const subfolderUrl = `https://ipfs.io/ipfs/${hash}/koperasi_anggota`;
+                const subfolderRes = await fetch(subfolderUrl).catch(() => null);
+                if (subfolderRes && subfolderRes.ok) {
+                    const subText = await subfolderRes.text();
+                    const subMatch = subText.match(regex);
+                    if (subMatch && subMatch[1]) {
+                        folderName = subMatch[1];
+                    }
+                }
+                possibleUrls.push(`https://ipfs.io/ipfs/${hash}/koperasi_anggota/${folderName}/identity.json`);
+            }
+            
+            // Standard fallback paths
+            possibleUrls.push(`https://ipfs.io/ipfs/${hash}/${folderName}/identity.json`);
+            possibleUrls.push(`https://ipfs.io/ipfs/${hash}/identity.json`);
+
+            let fetchedSuccess = false;
+            for (const url of possibleUrls) {
+                console.log(`[Decrypt API] Trying to fetch metadata from: ${url}`);
+                const trialRes = await fetch(url).catch(() => null);
+                if (trialRes && trialRes.ok) {
+                    metadataText = await trialRes.text();
+                    fetchedSuccess = true;
+                    break;
+                }
+            }
+
+            if (!fetchedSuccess) {
+                return res.status(404).json({ error: "Metadata file not found in directory" });
+            }
+        }
+
+        const decryptedJsonText = cryptoUtil.decryptText(metadataText);
+        const metadata = JSON.parse(decryptedJsonText);
+        res.json({ success: true, ...metadata });
+    } catch (e) {
+        console.error("[Decrypt API] Metadata decryption error:", e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// 3. Fetch and Decrypt IPFS Photo
+app.get('/api/ipfs/photo/:hash/:address', async (req, res) => {
+    const { hash, address } = req.params;
+    try {
+        const userAddressLower = address.toLowerCase();
+        let photoUrl = `https://ipfs.io/ipfs/${hash}`;
+
+        const headRes = await fetch(photoUrl, { method: 'HEAD' }).catch(() => null);
+        const contentType = headRes ? headRes.headers.get('content-type') : '';
+
+        if (contentType && contentType.includes('html')) {
+            const listRes = await fetch(photoUrl);
+            const htmlText = await listRes.text();
+            
+            let possibleUrls = [];
+            const regex = new RegExp(`([^"'/\\s]+_${userAddressLower})`, 'i');
+            
+            const match = htmlText.match(regex);
+            let folderName = match && match[1] ? match[1] : `anggota_${userAddressLower}`;
+            
+            // Scenario 1: Folder contains "koperasi_anggota" subfolder (IPFS Storage Mode)
+            if (htmlText.includes('koperasi_anggota')) {
+                const subfolderUrl = `https://ipfs.io/ipfs/${hash}/koperasi_anggota`;
+                const subfolderRes = await fetch(subfolderUrl).catch(() => null);
+                if (subfolderRes && subfolderRes.ok) {
+                    const subText = await subfolderRes.text();
+                    const subMatch = subText.match(regex);
+                    if (subMatch && subMatch[1]) {
+                        folderName = subMatch[1];
+                    }
+                }
+                possibleUrls.push(`https://ipfs.io/ipfs/${hash}/koperasi_anggota/${folderName}/ktp_photo`);
+            }
+            
+            // Scenario 2: Folder contains "koperasi_ktp" subfolder (On-Chain Storage Mode)
+            if (htmlText.includes('koperasi_ktp')) {
+                possibleUrls.push(`https://ipfs.io/ipfs/${hash}/koperasi_ktp/ktp_${userAddressLower}`);
+            }
+
+            possibleUrls.push(`https://ipfs.io/ipfs/${hash}/${folderName}/ktp_photo`);
+            possibleUrls.push(`https://ipfs.io/ipfs/${hash}/ktp_photo`);
+
+            let fetchedSuccess = false;
+            for (const url of possibleUrls) {
+                console.log(`[Decrypt API] Trying to fetch photo from: ${url}`);
+                const trialRes = await fetch(url).catch(() => null);
+                if (trialRes && trialRes.ok) {
+                    photoUrl = url;
+                    fetchedSuccess = true;
+                    break;
+                }
+            }
+
+            if (!fetchedSuccess) {
+                return res.status(404).json({ error: "Photo not found on IPFS" });
+            }
+        }
+
+        const photoRes = await fetch(photoUrl);
+        if (!photoRes.ok) {
+            return res.status(404).json({ error: "Photo not found on IPFS" });
+        }
+
+        const arrayBuffer = await photoRes.arrayBuffer();
+        const encryptedBuffer = Buffer.from(arrayBuffer);
+
+        const decryptedBuffer = cryptoUtil.decryptBuffer(encryptedBuffer);
+
+        res.setHeader('Content-Type', 'image/webp');
+        res.send(decryptedBuffer);
+    } catch (e) {
+        console.error("[Decrypt API] Photo decryption error:", e.message);
         res.status(500).json({ error: e.message });
     }
 });
@@ -1142,7 +1534,7 @@ app.listen(PORT, async () => {
 
     // Start Recovery & Sync Process
     await recoverIncompletePayments();
-    
+
     console.log("[Startup] Checking Xendit & Tunnel Health...");
     await checkXenditHealth();
 });

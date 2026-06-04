@@ -2,10 +2,46 @@ import React, { useState } from 'react';
 import HistoryList from '../HistoryList';
 
 const AdminHistory = ({ logs, onRefresh, isLoading }) => {
+  const [subTab, setSubTab] = useState('member'); // 'member' | 'admin'
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Define categorized events
+  const memberEvents = [
+    'DepositTercatat',
+    'PenarikanTercatat',
+    'PinjamanDiajukan',
+    'AngsuranMasuk',
+    'PinjamanLunas',
+    'SimpananBerjangkaDibuka',
+    'SimpananBerjangkaDicairkan'
+  ];
+
+  const adminEvents = [
+    'PinjamanDisetujui',
+    'PinjamanDitolak',
+    'SurveyApproved',
+    'CommitteeApproved',
+    'SettingsUpdated',
+    'StorageModeUpdated',
+    'TagihanDibuat',
+    'BagiHasilDirilis',
+    'MembershipClosed',
+    'PengurusDitambahkan',
+    'ConfigUpdated'
+  ];
+
+  // Filter logs by sub-tab category
+  const filteredByTab = logs.filter(log => {
+    const eventName = log.eventName || log.fragment?.name || '';
+    if (subTab === 'member') {
+      return memberEvents.includes(eventName);
+    } else {
+      return adminEvents.includes(eventName);
+    }
+  });
+
   // Filter logs based on search term (address or event name)
-  const filteredLogs = logs.filter(log => {
+  const filteredLogs = filteredByTab.filter(log => {
     const term = searchTerm.toLowerCase();
     const address = String(log.args?.user || log.args?.peminjam || log.args?.anggota || log.args[0] || '').toLowerCase();
     const eventName = (log.eventName || log.fragment?.name || '').toLowerCase();
@@ -15,6 +51,52 @@ const AdminHistory = ({ logs, onRefresh, isLoading }) => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {/* Segmented Tab Control */}
+      <div style={{
+        display: 'flex',
+        background: '#f1f5f9',
+        padding: '4px',
+        borderRadius: '12px',
+        width: 'fit-content',
+        border: '1px solid #e2e8f0',
+        alignSelf: 'flex-start',
+        boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
+      }}>
+        <button
+          onClick={() => setSubTab('member')}
+          style={{
+            padding: '8px 16px',
+            borderRadius: '10px',
+            border: 'none',
+            fontSize: '0.88rem',
+            fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            background: subTab === 'member' ? '#ffffff' : 'transparent',
+            color: subTab === 'member' ? '#0f172a' : '#64748b',
+            boxShadow: subTab === 'member' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+          }}
+        >
+          Riwayat Transaksi Anggota
+        </button>
+        <button
+          onClick={() => setSubTab('admin')}
+          style={{
+            padding: '8px 16px',
+            borderRadius: '10px',
+            border: 'none',
+            fontSize: '0.88rem',
+            fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            background: subTab === 'admin' ? '#ffffff' : 'transparent',
+            color: subTab === 'admin' ? '#0f172a' : '#64748b',
+            boxShadow: subTab === 'admin' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+          }}
+        >
+          Riwayat Aksi Pengurus (Admin)
+        </button>
+      </div>
       <div style={{ 
         background: 'white', 
         padding: '16px 24px', 

@@ -1,7 +1,7 @@
 // components/Loan/PendingLoan.jsx
 import React from 'react';
 import { cardStyles as styles } from '../../styles/cards';
-import { formatCurrency, formatToken } from '../../utils/format';
+import { formatCurrency, formatrupiah } from '../../utils/format';
 import LoanCard from './LoanCard';
 
 const PendingLoan = ({ pendingLoanUser }) => {
@@ -9,7 +9,7 @@ const PendingLoan = ({ pendingLoanUser }) => {
   const idVal = args.id !== undefined ? args.id : args[0];
   const jumlahVal = args.jumlah !== undefined ? args.jumlah : args[2];
 
-  const jumlah = formatCurrency(formatToken(jumlahVal));
+  const jumlah = formatCurrency(formatrupiah(jumlahVal));
 
   const ts = pendingLoanUser.extractedTimestamp || Number(args.waktu) || 0;
   const waktu = ts ? new Date(ts * 1000).toLocaleString('id-ID') : '-';

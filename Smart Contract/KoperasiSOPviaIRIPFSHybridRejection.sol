@@ -127,8 +127,8 @@ contract KoperasiSimpanPinjam is ReentrancyGuard, Ownable {
     uint256 public totalSHUDibagikan;
 
     bool public useIPFSStorage = false;
-
     event StorageModeUpdated(address indexed admin, bool useIPFS, uint256 timestamp);
+
     event AnggotaBaru(address indexed user, string nama, uint256 timestamp);
     event AnggotaRejoin(address indexed user, uint256 timestamp); 
     event DepositTercatat(address indexed user, uint256 jumlah, string jenis, uint256 timestamp);
@@ -340,18 +340,13 @@ contract KoperasiSimpanPinjam is ReentrancyGuard, Ownable {
     }
 
     function generateMonthlyBills(uint256 _nominal) external hanyaPengurus {
-        uint256 activeHumanMembers = 0;
         for (uint i = 0; i < listAlamatAnggota.length; i++) {
             address member = listAlamatAnggota[i];
-            if (member == address(this)) {
-                continue; // Exclude Koperasi Reserve from tagihan wajib
-            }
             if (dataAnggota[member].status == MemberStatus.Active) {
                 tagihanWajib[member] += _nominal;
-                activeHumanMembers++;
             }
         }
-        emit TagihanDibuat(_nominal * activeHumanMembers, block.timestamp);
+        emit TagihanDibuat(_nominal * jumlahAnggota, block.timestamp);
     }
 
     function bayarTagihanWajib(uint256 _amount) external hanyaAnggota openPeriod nonReentrant {
@@ -562,11 +557,18 @@ contract KoperasiSimpanPinjam is ReentrancyGuard, Ownable {
 
     function tolakPinjaman(uint256 _loanId, string memory _alasan) external hanyaPengurus {
         Pinjaman storage p = dataPinjaman[_loanId];
-        require(p.status == StatusPinjaman.Pending, "Status invalid");
+        // Menerima penolakan di fase Pending, Surveyed, maupun CommitteeApproved
+        require(
+            p.status == StatusPinjaman.Pending || 
+            p.status == StatusPinjaman.Surveyed || 
+            p.status == StatusPinjaman.CommitteeApproved, 
+            "Status invalid"
+        );
         p.status = StatusPinjaman.Ditolak;
         idPinjamanAktifAnggota[p.peminjam] = 0; 
         emit PinjamanDitolak(_loanId, p.peminjam, _alasan);
     }
+
 
     function updateCollectibilityStatus(uint256 _loanId, Kolektibilitas _status) external hanyaPengurus {
         dataPinjaman[_loanId].quality = _status;
