@@ -5,25 +5,125 @@ import { formatCurrency } from '../../utils/format';
 import InlineMessage from '../InlineMessage';
 
 const RegisterForm = ({ onRegister, isLoading, isPaymentLocked, paymentSuccess, paymentType, userAddress, adminConfig }) => {
-  const [step, setStep] = useState(1);
-  const [formData, setFormData] = useState({
-    nama: '',
-    noHP: '',
-    noKTP: '',
-    alamat: '',
-    gender: 'Laki-laki',
-    jobType: '', 
-    jobOther: '', 
-    emergencyName: '',
-    emergencyPhone: '',
-    branchId: '1'
+  const [step, setStep] = useState(() => {
+    try {
+      const addr = userAddress ? userAddress.toLowerCase() : null;
+      const saved = addr ? sessionStorage.getItem(`register_form_step_${addr}`) : null;
+      if (saved) {
+        const val = parseInt(saved);
+        if (val >= 1 && val <= 3) return val;
+      }
+    } catch (e) {}
+    return 1;
+  });
+  const [formData, setFormData] = useState(() => {
+    try {
+      const addr = userAddress ? userAddress.toLowerCase() : null;
+      const saved = addr ? sessionStorage.getItem(`register_form_data_${addr}`) : null;
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return {
+      nama: '',
+      noHP: '',
+      noKTP: '',
+      alamat: '',
+      gender: 'Laki-laki',
+      jobType: '', 
+      jobOther: '', 
+      emergencyName: '',
+      emergencyPhone: '',
+      branchId: '1'
+    };
   });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState('');
   const [isError, setIsError] = useState(false);
   const [ktpPhoto, setKtpPhoto] = useState(null);
-  const [photoPreview, setPhotoPreview] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(() => {
+    const addr = userAddress ? userAddress.toLowerCase() : null;
+    return addr ? sessionStorage.getItem(`register_ktp_photo_base64_${addr}`) : null;
+  });
+
+  const activeAddressRef = React.useRef(userAddress);
+
+  // [MITIGASI] Reload form data and step when userAddress switches
+  useEffect(() => {
+    const addr = userAddress ? userAddress.toLowerCase() : null;
+    if (addr) {
+      const savedStep = sessionStorage.getItem(`register_form_step_${addr}`);
+      if (savedStep) {
+        const val = parseInt(savedStep);
+        if (val >= 1 && val <= 3) setStep(val);
+      } else {
+        setStep(1);
+      }
+
+      const savedData = sessionStorage.getItem(`register_form_data_${addr}`);
+      if (savedData) {
+        setFormData(JSON.parse(savedData));
+      } else {
+        setFormData({
+          nama: '',
+          noHP: '',
+          noKTP: '',
+          alamat: '',
+          gender: 'Laki-laki',
+          jobType: '', 
+          jobOther: '', 
+          emergencyName: '',
+          emergencyPhone: '',
+          branchId: '1'
+        });
+      }
+
+      const savedPhoto = sessionStorage.getItem(`register_ktp_photo_base64_${addr}`);
+      setPhotoPreview(savedPhoto || null);
+    } else {
+      setStep(1);
+      setFormData({
+        nama: '',
+        noHP: '',
+        noKTP: '',
+        alamat: '',
+        gender: 'Laki-laki',
+        jobType: '', 
+        jobOther: '', 
+        emergencyName: '',
+        emergencyPhone: '',
+        branchId: '1'
+      });
+      setPhotoPreview(null);
+    }
+    setKtpPhoto(null);
+    setErrors({});
+    setMsg('');
+    setIsError(false);
+    
+    // Update ref to allow writes to new account
+    activeAddressRef.current = userAddress;
+  }, [userAddress]);
+
+  useEffect(() => {
+    if (userAddress && activeAddressRef.current && userAddress.toLowerCase() === activeAddressRef.current.toLowerCase()) {
+      sessionStorage.setItem(`register_form_step_${userAddress.toLowerCase()}`, step.toString());
+    }
+  }, [step, userAddress]);
+
+  useEffect(() => {
+    if (userAddress && activeAddressRef.current && userAddress.toLowerCase() === activeAddressRef.current.toLowerCase()) {
+      sessionStorage.setItem(`register_form_data_${userAddress.toLowerCase()}`, JSON.stringify(formData));
+    }
+  }, [formData, userAddress]);
+
+  useEffect(() => {
+    if (paymentSuccess && paymentType === 'POKOK' && userAddress) {
+      const addr = userAddress.toLowerCase();
+      sessionStorage.removeItem(`register_form_step_${addr}`);
+      sessionStorage.removeItem(`register_form_data_${addr}`);
+      sessionStorage.removeItem(`register_ktp_photo_base64_${addr}`);
+    }
+  }, [paymentSuccess, paymentType, userAddress]);
 
   const validateField = (name, value) => {
     let error = "";
@@ -70,7 +170,17 @@ const RegisterForm = ({ onRegister, isLoading, isPaymentLocked, paymentSuccess, 
     try {
       const compressedFile = await imageCompression(file, options);
       setKtpPhoto(compressedFile);
-      setPhotoPreview(URL.createObjectURL(compressedFile));
+      
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error("Gagal membaca berkas KTP"));
+        reader.readAsDataURL(compressedFile);
+      });
+      if (userAddress) {
+        sessionStorage.setItem(`register_ktp_photo_base64_${userAddress.toLowerCase()}`, base64);
+      }
+      setPhotoPreview(base64);
       setMsg("Foto berhasil dikompres!");
       setIsError(false);
       setErrors(prev => ({ ...prev, ktpPhoto: "" }));
@@ -105,7 +215,8 @@ const RegisterForm = ({ onRegister, isLoading, isPaymentLocked, paymentSuccess, 
         if (!formData.nama || errors.nama) stepErrors.nama = errors.nama || "Nama wajib diisi";
         if (!formData.noHP || errors.noHP) stepErrors.noHP = errors.noHP || "No HP wajib diisi";
         if (!formData.noKTP || errors.noKTP) stepErrors.noKTP = errors.noKTP || "NIK wajib diisi";
-        if (!ktpPhoto) stepErrors.ktpPhoto = "Foto KTP wajib diunggah";
+        const hasPhoto = ktpPhoto || photoPreview || (userAddress && sessionStorage.getItem(`register_ktp_photo_base64_${userAddress.toLowerCase()}`));
+        if (!hasPhoto) stepErrors.ktpPhoto = "Foto KTP wajib diunggah";
     }
     if (s === 2) {
         if (!formData.alamat || errors.alamat) stepErrors.alamat = errors.alamat || "Alamat wajib diisi";
@@ -133,7 +244,8 @@ const RegisterForm = ({ onRegister, isLoading, isPaymentLocked, paymentSuccess, 
     if (!formData.nama || errors.nama) allErrors.nama = errors.nama || "Nama wajib diisi";
     if (!formData.noHP || errors.noHP) allErrors.noHP = errors.noHP || "No HP wajib diisi";
     if (!formData.noKTP || errors.noKTP) allErrors.noKTP = errors.noKTP || "NIK wajib diisi";
-    if (!ktpPhoto) allErrors.ktpPhoto = "Foto KTP wajib diunggah";
+    const hasPhoto = ktpPhoto || photoPreview || sessionStorage.getItem('register_ktp_photo_base64');
+    if (!hasPhoto) allErrors.ktpPhoto = "Foto KTP wajib diunggah";
 
     // Step 2
     if (!formData.alamat || errors.alamat) allErrors.alamat = errors.alamat || "Alamat wajib diisi";
@@ -182,9 +294,9 @@ const RegisterForm = ({ onRegister, isLoading, isPaymentLocked, paymentSuccess, 
       const jobValue = formData.jobType === 'Lainnya' ? formData.jobOther : formData.jobType;
       const emergencyValue = `${formData.emergencyName} (${formData.emergencyPhone})`;
       
-      // Convert photo to base64 if exists
-      let photoBase64 = null;
-      if (ktpPhoto) {
+      // Convert photo to base64 if exists, or use the one from sessionStorage
+      let photoBase64 = photoPreview || (userAddress && sessionStorage.getItem(`register_ktp_photo_base64_${userAddress.toLowerCase()}`));
+      if (!photoBase64 && ktpPhoto) {
         setMsg("Menyiapkan berkas foto...");
         photoBase64 = await new Promise((resolve, reject) => {
           const reader = new FileReader();

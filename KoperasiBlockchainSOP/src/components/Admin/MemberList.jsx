@@ -60,10 +60,25 @@ const MemberDetailModal = ({ member, onClose, allLogs, onCloseMembership }) => {
   const [ipfsData, setIpfsData] = React.useState(null);
   const [ipfsLoading, setIpfsLoading] = React.useState(false);
 
+  const getAuthToken = () => {
+    const activeAddr = window.ethereum?.selectedAddress;
+    if (activeAddr) {
+      return localStorage.getItem(`auth_token_${activeAddr.toLowerCase()}`);
+    }
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('auth_token_')) {
+        return localStorage.getItem(key);
+      }
+    }
+    return null;
+  };
+
   const getPhotoUrl = (photoHash) => {
     if (!photoHash) return '';
     if (photoHash.startsWith('http')) return photoHash;
-    return `http://localhost:5000/api/ipfs/photo/${member.profileHash}/${member.address}`;
+    const token = getAuthToken();
+    return `http://localhost:5000/api/ipfs/photo/${member.profileHash}/${member.address}${token ? `?token=${token}` : ''}`;
   };
 
   React.useEffect(() => {
@@ -72,7 +87,19 @@ const MemberDetailModal = ({ member, onClose, allLogs, onCloseMembership }) => {
         setIpfsLoading(true);
         try {
           const userAddress = String(member.address).toLowerCase();
-          const res = await fetch(`http://localhost:5000/api/ipfs/metadata/${member.profileHash}/${userAddress}`);
+          const token = getAuthToken();
+          const headers = {};
+          if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+          }
+          const res = await fetch(`http://localhost:5000/api/ipfs/metadata/${member.profileHash}/${userAddress}`, { headers });
+          if (res.status === 401) {
+            const activeAddr = window.ethereum?.selectedAddress;
+            if (activeAddr) {
+              localStorage.removeItem(`auth_token_${activeAddr.toLowerCase()}`);
+              window.dispatchEvent(new CustomEvent('auth-unauthorized', { detail: { address: activeAddr } }));
+            }
+          }
           if (res.ok) {
             const data = await res.json();
             setIpfsData(data);
@@ -147,34 +174,70 @@ const MemberDetailModal = ({ member, onClose, allLogs, onCloseMembership }) => {
             </div>
           </div>
 
-          {/* [BARU] Informasi Identitas dari IPFS */}
+          {/* [BARU] Informasi Identitas dari IPFS atau On-Chain */}
           <div style={{ marginTop: '24px', backgroundColor: '#f8fafc', padding: '20px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
-            <h4 style={{ fontSize: '0.85rem', fontWeight: '800', color: '#1e40af', marginBottom: '16px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-              Identitas Terverifikasi (IPFS)
-            </h4>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+              <h4 style={{ fontSize: '0.85rem', fontWeight: '800', color: '#1e40af', margin: 0, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                Identitas Terverifikasi
+              </h4>
+              <span style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '4px 10px',
+                borderRadius: '99px',
+                fontSize: '0.725rem',
+                fontWeight: '700',
+                backgroundColor: member.isIPFSStorage ? '#eff6ff' : '#ecfdf5',
+                color: member.isIPFSStorage ? '#2563eb' : '#059669',
+                border: member.isIPFSStorage ? '1px solid #dbeafe' : '1px solid #a7f3d0',
+                textTransform: 'none'
+              }}>
+                <span style={{
+                  width: '6px',
+                  height: '6px',
+                  borderRadius: '50%',
+                  backgroundColor: member.isIPFSStorage ? '#2563eb' : '#059669',
+                  display: 'inline-block'
+                }} />
+                {member.isIPFSStorage ? 'Penyimpanan: IPFS' : 'Penyimpanan: On-Chain (Blockchain)'}
+              </span>
+            </div>
             
             {ipfsLoading ? (
               <p style={{ fontSize: '0.875rem', color: '#64748b' }}>Memuat data dari IPFS...</p>
-            ) : ipfsData ? (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            ) : (ipfsData || member.noHP || member.noKTP || member.alamat) ? (
+              <div style={{ display: 'grid', gridTemplateColumns: '1.25fr 0.75fr', gap: '20px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div>
                     <div style={modalStyles.statLabel}>Nomor KTP (NIK)</div>
-                    <div style={{ ...modalStyles.statValue, fontSize: '0.9rem' }}>{ipfsData.noKTP || '-'}</div>
+                    <div style={{ ...modalStyles.statValue, fontSize: '0.9rem' }}>{ipfsData?.noKTP || member.noKTP || '-'}</div>
                   </div>
                   <div>
                     <div style={modalStyles.statLabel}>WhatsApp / HP</div>
-                    <div style={{ ...modalStyles.statValue, fontSize: '0.9rem' }}>{ipfsData.noHP || '-'}</div>
+                    <div style={{ ...modalStyles.statValue, fontSize: '0.9rem' }}>{ipfsData?.noHP || member.noHP || '-'}</div>
+                  </div>
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <div style={modalStyles.statLabel}>Alamat Lengkap</div>
+                    <div style={{ ...modalStyles.statValue, fontSize: '0.85rem', fontWeight: '500', lineHeight: '1.4' }}>{ipfsData?.alamat || member.alamat || '-'}</div>
                   </div>
                   <div>
-                    <div style={modalStyles.statLabel}>Alamat Lengkap</div>
-                    <div style={{ ...modalStyles.statValue, fontSize: '0.85rem', fontWeight: '500', lineHeight: '1.4' }}>{ipfsData.alamat || '-'}</div>
+                    <div style={modalStyles.statLabel}>Jenis Kelamin</div>
+                    <div style={{ ...modalStyles.statValue, fontSize: '0.9rem' }}>{ipfsData?.gender || member.gender || '-'}</div>
+                  </div>
+                  <div>
+                    <div style={modalStyles.statLabel}>Pekerjaan</div>
+                    <div style={{ ...modalStyles.statValue, fontSize: '0.9rem' }}>{ipfsData?.job || member.job || '-'}</div>
+                  </div>
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <div style={modalStyles.statLabel}>Kontak Darurat (Emergency)</div>
+                    <div style={{ ...modalStyles.statValue, fontSize: '0.9rem' }}>{ipfsData?.emergency || member.emergency || '-'}</div>
                   </div>
                 </div>
                 <div>
                   <div style={modalStyles.statLabel}>Foto KTP</div>
-                  {ipfsData.photoHash ? (
+                  {ipfsData?.photoHash ? (
                     <div 
                       style={{ cursor: 'pointer', position: 'relative' }}
                       onClick={() => window.open(getPhotoUrl(ipfsData.photoHash), '_blank')}
@@ -187,12 +250,12 @@ const MemberDetailModal = ({ member, onClose, allLogs, onCloseMembership }) => {
                       <div style={{ position: 'absolute', bottom: '4px', right: '4px', backgroundColor: 'rgba(0,0,0,0.5)', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Klik Perbesar</div>
                     </div>
                   ) : (
-                    <div style={{ height: '80px', backgroundColor: '#f1f5f9', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', color: '#94a3b8' }}>Tidak ada foto</div>
+                    <div style={{ height: '100px', backgroundColor: '#f1f5f9', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', color: '#94a3b8' }}>Tidak ada foto</div>
                   )}
                 </div>
               </div>
             ) : (
-              <p style={{ fontSize: '0.875rem', color: '#94a3b8' }}>Data identitas tidak ditemukan atau belum bermigrasi ke IPFS.</p>
+              <p style={{ fontSize: '0.875rem', color: '#94a3b8' }}>Data identitas tidak ditemukan.</p>
             )}
           </div>
 
@@ -362,7 +425,21 @@ const MemberList = ({ members, isLoading, simpananLogs, compact, onCloseMembersh
                       </div>
                       <div>
                         <div style={styles.memberName}>{m.nama || 'Tanpa Nama'}</div>
-                        <div style={styles.memberStatus}>Anggota Koperasi</div>
+                        <div style={{
+                          ...styles.memberStatus,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}>
+                          <span>Anggota Koperasi</span>
+                          <span style={{ color: '#cbd5e1' }}>•</span>
+                          <span style={{
+                            fontWeight: '600',
+                            color: m.isIPFSStorage ? '#3b82f6' : '#10b981'
+                          }}>
+                            {m.isIPFSStorage ? 'IPFS' : 'On-Chain'}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </td>

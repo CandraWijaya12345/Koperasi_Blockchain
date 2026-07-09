@@ -58,7 +58,6 @@ const AdminPage = () => {
     tolakPinjaman,
     updateGlobalSettings,
     changeStorageMode,
-    tambahLikuiditas,
     adminStats,
     shuHistory,
     allSimpananLogs,
@@ -78,6 +77,27 @@ const AdminPage = () => {
 
   const [activeTab, setActiveTab] = useState('dashboard');
   const globalMessage = walletError || message;
+
+  const getPageTitle = () => {
+    switch (activeTab) {
+      case 'dashboard':
+        return 'Dashboard Overview';
+      case 'anggota':
+        return 'Member Management';
+      case 'pinjaman':
+        return 'Loan Management';
+      case 'governance':
+        return 'Governance';
+      case 'likuiditas':
+        return 'Financial & Liquidity';
+      case 'riwayat':
+        return 'Global Transaction History';
+      case 'pengaturan':
+        return 'Admin Settings';
+      default:
+        return 'Control Center';
+    }
+  };
 
   // --- Transaction Overlay for Admin Actions ---
   const [txOverlay, setTxOverlay] = useState({
@@ -134,8 +154,7 @@ const AdminPage = () => {
   const wrappedTolakPinjaman = wrapAdminAction(tolakPinjaman, 'Memproses penolakan pinjaman...', 'Menolak pengajuan pinjaman anggota.');
   const wrappedApproveSurvey = wrapAdminAction(approveSurvey, 'Memproses persetujuan survey...', 'Menyimpan hasil survey ke dalam blockchain.');
   const wrappedApproveCommittee = wrapAdminAction(approveCommittee, 'Memproses persetujuan komite...', 'Menyetujui kelayakan pinjaman oleh komite.');
-  const wrappedMintRupiah = wrapAdminAction(mintrupiah, 'Memproses pencetakan Rupiah...', 'Mencetak token Rupiah baru ke wallet tujuan.');
-  const wrappedTambahLikuiditas = wrapAdminAction(tambahLikuiditas, 'Menambahkan likuiditas...', 'Mentransfer likuiditas ke pool Koperasi.');
+  const wrappedMintRupiah = wrapAdminAction(mintrupiah, 'Memproses pencetakan Rupiah...', 'Mencetak Rupiah baru ke wallet tujuan.');
   const wrappedUpdateSettings = wrapAdminAction(updateGlobalSettings, 'Mengubah pengaturan...', 'Menyimpan konfigurasi baru ke blockchain.');
   const wrappedChangeStorageMode = wrapAdminAction(changeStorageMode, 'Mengubah mode penyimpanan...', 'Memperbarui mode penyimpanan data anggota.');
   const wrappedSyncLiquidity = wrapAdminAction(syncLiquidity, 'Menyelaraskan likuiditas...', 'Sinkronisasi saldo kas nyata dengan kas blockchain.');
@@ -271,7 +290,7 @@ const AdminPage = () => {
         <div style={styles.main}>
           <header style={styles.topbar}>
             <div>
-              <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#1e293b' }}>Control Center</h2>
+              <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#1e293b' }}>{getPageTitle()}</h2>
             </div>
             
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -321,11 +340,6 @@ const AdminPage = () => {
                   }
                 `}</style>
               </div>
-
-              <div style={styles.profileBox}>
-                <div style={styles.profileAvatar}>A</div>
-                <span style={{ marginLeft: '10px', fontSize: '0.9rem', fontWeight: '600', color: '#1e293b' }}>Administrator</span>
-              </div>
             </div>
           </header>
 
@@ -347,9 +361,6 @@ const AdminPage = () => {
           <main style={styles.content}>
             {activeTab === 'dashboard' && (
               <>
-                <div style={{ marginBottom: '24px' }}>
-                  <h1 style={styles.welcomeTitle}>Dashboard Overview</h1>
-                </div>
                 <section style={styles.statsRow}>
                   <StatCard label="Pending Loans" value={allLoans.pending ? allLoans.pending.length : 0} trend="Requires Action" urgent />
                   <StatCard label="Active Loans" value={allLoans.active ? allLoans.active.length : 0} trend="Performing" />
@@ -379,7 +390,6 @@ const AdminPage = () => {
 
             {activeTab === 'anggota' && (
               <div style={styles.pageCard}>
-                <h2 style={styles.pageTitle}>Member Management</h2>
                 <MemberList members={memberList} isLoading={isLoading} simpananLogs={allGlobalLogs} onMint={wrappedMintRupiah} onCloseMembership={wrappedCloseMembership} />
               </div>
             )}
@@ -415,14 +425,12 @@ const AdminPage = () => {
 
             {activeTab === 'likuiditas' && (
               <div style={styles.pageCard}>
-                <h2 style={styles.pageTitle}>Financial & Liquidity</h2>
-                <FundManagement stats={adminStats} onWithdraw={emergencyWithdraw} onAddLiquidity={wrappedTambahLikuiditas} onSync={wrappedSyncLiquidity} isLoading={isLoading} />
+                 <FundManagement stats={adminStats} onWithdraw={emergencyWithdraw} onSync={wrappedSyncLiquidity} isLoading={isLoading} />
               </div>
             )}
 
             {activeTab === 'riwayat' && (
               <div style={styles.pageCard}>
-                <h2 style={styles.pageTitle}>Global Transaction History</h2>
                 <AdminHistory logs={allGlobalLogs} onRefresh={fetchAllGlobalLogs} isLoading={isLoading} />
               </div>
             )}
@@ -431,8 +439,8 @@ const AdminPage = () => {
               <div style={styles.pageCard}>
                 <AdminSettings 
                   config={adminConfig} 
-                  onUpdate={wrappedUpdateSettings} 
-                  onChangeStorageMode={wrappedChangeStorageMode}
+                  onUpdate={updateGlobalSettings} 
+                  onChangeStorageMode={changeStorageMode}
                   isLoading={isLoading} 
                   systemStatus={systemStatus}
                   confirmWebhookUpdate={confirmWebhookUpdate}
@@ -511,7 +519,7 @@ const styles = {
     fontSize: '0.7rem',
     textTransform: 'uppercase',
     color: '#94a3b8',
-    fontWeight: 700,
+    fontWeight: 600,
     letterSpacing: '0.05em',
     marginTop: 16,
     marginBottom: 8,

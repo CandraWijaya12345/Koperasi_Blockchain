@@ -1,1 +1,13 @@
-{}
+{
+  "0x1111111111111111111111111111111111111111": {
+    "user": "0x1111111111111111111111111111111111111111",
+    "nama": "<script>alert('xss')</script>",
+    "noHP": "081234567890",
+    "noKTP": "1234567890123456",
+    "photoBase64": "data:image/png;base64,iVBOR",
+    "alamat": "Jl. Test Address No. 123 Jakarta",
+    "gender": "L",
+    "job": "Dev",
+    "emergency": "08999"
+  }
+}

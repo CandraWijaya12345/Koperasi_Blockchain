@@ -7,15 +7,19 @@ const PINATA_API_SECRET = process.env.PINATA_API_SECRET;
 /**
  * Mengunggah JSON (Data Identitas) ke IPFS via Pinata
  */
-const uploadJSONToIPFS = async (jsonData, customName) => {
+const uploadJSONToIPFS = async (jsonData, customName, groupId = null) => {
     try {
         const url = `https://api.pinata.cloud/pinning/pinJSONToIPFS`;
-        const response = await axios.post(url, {
+        const body = {
             pinataContent: jsonData,
             pinataMetadata: {
                 name: customName || `Member_Identity_${Date.now()}.json`
             }
-        }, {
+        };
+        if (groupId) {
+            body.pinataOptions = { groupId };
+        }
+        const response = await axios.post(url, body, {
             headers: {
                 'Content-Type': 'application/json',
                 'pinata_api_key': PINATA_API_KEY,
@@ -32,11 +36,15 @@ const uploadJSONToIPFS = async (jsonData, customName) => {
 /**
  * Mengunggah File (Foto KTP) ke IPFS via Pinata
  */
-const uploadFileToIPFS = async (fileBuffer, fileName) => {
+const uploadFileToIPFS = async (fileBuffer, fileName, groupId = null) => {
     try {
         const url = `https://api.pinata.cloud/pinning/pinFileToIPFS`;
         let data = new FormData();
         data.append('file', fileBuffer, fileName);
+
+        if (groupId) {
+            data.append('pinataOptions', JSON.stringify({ groupId }));
+        }
 
         const response = await axios.post(url, data, {
             maxBodyLength: 'Infinity',
@@ -57,7 +65,7 @@ const uploadFileToIPFS = async (fileBuffer, fileName) => {
  * Mengunggah Multiple Files ke IPFS dengan struktur folder via Pinata
  * @param {Array<{buffer: Buffer, filepath: string}>} filesList 
  */
-const uploadDirectoryToIPFS = async (filesList) => {
+const uploadDirectoryToIPFS = async (filesList, groupId = null) => {
     try {
         const url = `https://api.pinata.cloud/pinning/pinFileToIPFS`;
         let data = new FormData();
@@ -66,6 +74,10 @@ const uploadDirectoryToIPFS = async (filesList) => {
             data.append('file', file.buffer, {
                 filepath: file.filepath
             });
+        }
+
+        if (groupId) {
+            data.append('pinataOptions', JSON.stringify({ groupId }));
         }
 
         const response = await axios.post(url, data, {

@@ -48,8 +48,14 @@ const BackIcon = () => (
 
 const LoanDetailPage = () => {
     const navigate = useNavigate();
-    const { account, connectWallet, disconnectWallet, isConnecting } = useWallet();
+    const { account, connectWallet, disconnectWallet, isConnecting, isCheckingConnection } = useWallet();
     const { pinjamanAktif, isLoading } = useKoperasi(account);
+
+    React.useEffect(() => {
+        if (!isCheckingConnection && !account && !isConnecting) {
+            navigate('/', { replace: true });
+        }
+    }, [account, isConnecting, isCheckingConnection, navigate]);
 
     const formatDate = (timestamp) => {
         if (!timestamp) return '-';

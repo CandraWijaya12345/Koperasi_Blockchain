@@ -66,8 +66,8 @@ const TransactionModal = ({ isVisible, stage, message, type = 'simpanan', error,
         {/* Progress Stages */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '32px' }}>
           {currentStages.map((s, idx) => {
-            const isCurrent = stage === s.id;
-            const isDone = stage > s.id;
+            const isDone = stage > s.id || (stage >= 4 && s.id === 4);
+            const isCurrent = stage === s.id && !isDone;
             const isPending = stage < s.id;
 
             return (

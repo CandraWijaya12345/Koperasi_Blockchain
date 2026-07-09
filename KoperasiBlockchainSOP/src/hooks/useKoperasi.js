@@ -15,6 +15,53 @@ import IDRABI from '../abi/idrABI.json';
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+// [SECURITY] Authenticated fetch helper — attaches JWT token to all API requests
+// No MetaMask popup needed — token is acquired once during login
+const authFetch = async (url, options = {}, account = null) => {
+  const addr = account ? account.toLowerCase() : null;
+  const token = addr ? localStorage.getItem(`auth_token_${addr}`) : null;
+  const headers = {
+    ...(options.headers || {}),
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  try {
+    const res = await fetch(url, { ...options, headers });
+    if (res.status === 401 && addr) {
+      console.warn(`[Auth] 401 Unauthorized for address ${addr}. Clearing token...`);
+      localStorage.removeItem(`auth_token_${addr}`);
+      window.dispatchEvent(new CustomEvent('auth-unauthorized', { detail: { address: addr } }));
+    }
+    return res;
+  } catch (err) {
+    console.error("authFetch network error:", err);
+    throw err;
+  }
+};
+
+const cloneArgs = (args) => {
+  if (!args) return {};
+  try {
+    let cloned;
+    if (Array.isArray(args) || typeof args.length === 'number') {
+      cloned = Array.from(args);
+    } else {
+      cloned = { ...args };
+    }
+    if (typeof args.toObject === 'function') {
+      const obj = args.toObject();
+      for (const key of Object.keys(obj)) {
+        cloned[key] = obj[key];
+      }
+    }
+    return cloned;
+  } catch (e) {
+    console.error("Failed to clone args:", e);
+    return args;
+  }
+};
+
 // [FIX] Polygon Amoy Gas Overrides (Min 25 Gwei Priority Fee needed, set high to process instantly)
 const POLYGON_GAS_OPTIONS = {
   maxPriorityFeePerGas: ethers.parseUnits('100', 'gwei'), // Generous tip to miners to prevent stuck transactions
@@ -128,14 +175,20 @@ const fetchLogsChunked = async (kop, filter, startBlock) => {
 const ipfsNameCache = {};
 const decryptionCache = {};
 
-const fetchIPFSName = async (hash, address = "") => {
+const fetchIPFSName = async (hash, address = "", accountAddr = null) => {
   if (!hash) return "";
+  const addr = accountAddr ? accountAddr.toLowerCase() : null;
+  const token = addr ? localStorage.getItem(`auth_token_${addr}`) : null;
+  if (!token) {
+    console.log(`[Auth] No token found for ${addr}. Skipping IPFS metadata API call.`);
+    return "";
+  }
   const cacheKey = `${hash}_${address.toLowerCase()}`;
   if (ipfsNameCache[cacheKey]) {
     return ipfsNameCache[cacheKey];
   }
   try {
-    const res = await fetch(`http://localhost:5000/api/ipfs/metadata/${hash}/${address}`);
+    const res = await authFetch(`http://localhost:5000/api/ipfs/metadata/${hash}/${address}`, {}, accountAddr);
     if (res.ok) {
       const data = await res.json();
       const nama = data.nama || "";
@@ -150,17 +203,23 @@ const fetchIPFSName = async (hash, address = "") => {
   return "";
 };
 
-const decryptTextAPI = async (encryptedText) => {
+const decryptTextAPI = async (encryptedText, accountAddr = null) => {
   if (!encryptedText || !encryptedText.includes(':')) return encryptedText;
+  const addr = accountAddr ? accountAddr.toLowerCase() : null;
+  const token = addr ? localStorage.getItem(`auth_token_${addr}`) : null;
+  if (!token) {
+    console.log(`[Auth] No token found for ${addr}. Skipping decryption API call.`);
+    return encryptedText;
+  }
   if (decryptionCache[encryptedText]) {
     return decryptionCache[encryptedText];
   }
   try {
-    const res = await fetch('http://localhost:5000/api/crypto/decrypt', {
+    const res = await authFetch('http://localhost:5000/api/crypto/decrypt', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: encryptedText })
-    });
+    }, accountAddr);
     const data = await res.json();
     const decrypted = data.decrypted || encryptedText;
     if (decrypted && decrypted !== encryptedText) {
@@ -184,11 +243,27 @@ export const useKoperasi = (account) => {
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // [FIX] Persist payment state across page refreshes (for Xendit redirect)
-  const [isPaymentLocked, setIsPaymentLocked] = useState(() => sessionStorage.getItem('isPaymentLocked') === 'true');
-  const [paymentSuccess, setPaymentSuccess] = useState(() => sessionStorage.getItem('paymentSuccess') === 'true');
-  const [paymentType, setPaymentType] = useState(() => sessionStorage.getItem('paymentType') || 'simpanan');
-  const [paymentBaseline, setPaymentBaseline] = useState(() => BigInt(sessionStorage.getItem('paymentBaseline') || '0'));
+  // [FIX] Persist payment state across page refreshes (for Xendit redirect), scoped by account
+  const [isPaymentLocked, setIsPaymentLocked] = useState(() => {
+    const addr = account ? account.toLowerCase() : null;
+    const key = addr ? `isPaymentLocked_${addr}` : 'isPaymentLocked';
+    return sessionStorage.getItem(key) === 'true';
+  });
+  const [paymentSuccess, setPaymentSuccess] = useState(() => {
+    const addr = account ? account.toLowerCase() : null;
+    const key = addr ? `paymentSuccess_${addr}` : 'paymentSuccess';
+    return sessionStorage.getItem(key) === 'true';
+  });
+  const [paymentType, setPaymentType] = useState(() => {
+    const addr = account ? account.toLowerCase() : null;
+    const key = addr ? `paymentType_${addr}` : 'paymentType';
+    return sessionStorage.getItem(key) || 'simpanan';
+  });
+  const [paymentBaseline, setPaymentBaseline] = useState(() => {
+    const addr = account ? account.toLowerCase() : null;
+    const key = addr ? `paymentBaseline_${addr}` : 'paymentBaseline';
+    return BigInt(sessionStorage.getItem(key) || '0');
+  });
 
   // [BARU] Status Kesehatan Backend (Xendit, Tunnel & Blockchain)
   const [systemStatus, setSystemStatus] = useState({
@@ -215,13 +290,35 @@ export const useKoperasi = (account) => {
     }
   }, [systemStatus.currentUrl]);
 
+  // Ref-based account tracking to prevent cross-account state contamination during switches
+  const stateAccountRef = useRef(account);
 
   useEffect(() => {
-    sessionStorage.setItem('isPaymentLocked', isPaymentLocked);
-    sessionStorage.setItem('paymentType', paymentType);
-    sessionStorage.setItem('paymentSuccess', paymentSuccess);
-    sessionStorage.setItem('paymentBaseline', paymentBaseline.toString());
-  }, [isPaymentLocked, paymentType, paymentSuccess, paymentBaseline]);
+    if (account) {
+      const addrLower = account.toLowerCase();
+      setIsPaymentLocked(sessionStorage.getItem(`isPaymentLocked_${addrLower}`) === 'true');
+      setPaymentSuccess(sessionStorage.getItem(`paymentSuccess_${addrLower}`) === 'true');
+      setPaymentType(sessionStorage.getItem(`paymentType_${addrLower}`) || 'simpanan');
+      setPaymentBaseline(BigInt(sessionStorage.getItem(`paymentBaseline_${addrLower}`) || '0'));
+      stateAccountRef.current = account;
+    } else {
+      setIsPaymentLocked(false);
+      setPaymentSuccess(false);
+      setPaymentType('simpanan');
+      setPaymentBaseline(0n);
+      stateAccountRef.current = null;
+    }
+  }, [account]);
+
+  useEffect(() => {
+    if (account && stateAccountRef.current && account.toLowerCase() === stateAccountRef.current.toLowerCase()) {
+      const addrLower = account.toLowerCase();
+      sessionStorage.setItem(`isPaymentLocked_${addrLower}`, isPaymentLocked);
+      sessionStorage.setItem(`paymentType_${addrLower}`, paymentType);
+      sessionStorage.setItem(`paymentSuccess_${addrLower}`, paymentSuccess);
+      sessionStorage.setItem(`paymentBaseline_${addrLower}`, paymentBaseline.toString());
+    }
+  }, [isPaymentLocked, paymentType, paymentSuccess, paymentBaseline, account]);
 
   const [isPengurus, setIsPengurus] = useState(false);
   const [anggotaData, setAnggotaData] = useState(null);
@@ -249,6 +346,8 @@ export const useKoperasi = (account) => {
     deductUpfront: false,
     useIPFSStorage: false
   });
+
+  const targetSettingsRef = useRef(null);
 
   // --- helper untuk approval rupiah ---
   const handleApprove = async (amount, onProgress) => {
@@ -374,28 +473,78 @@ export const useKoperasi = (account) => {
         ...logDitolak,
         ...logBerjangkaBuka,
         ...logBerjangkaCair,
+        ...logBaru,
         // ...logSHU, (Hidden for presentation)
         ...logMemberUpdates
       ];
 
+      // Map ID -> Amount from allAjukan
+      const userLoanAmounts = {};
+      allAjukan.forEach(l => {
+        if (l.args) {
+          const id = Number(l.args.id || l.args[0]);
+          const jumlah = l.args.jumlah || l.args[2];
+          if (id && jumlah) {
+            userLoanAmounts[id] = jumlah;
+          }
+        }
+      });
+
       // Fetch timestamps for all logs
-      const allLogsWithTime = await Promise.all(allLogs.map(async (l) => {
+      const allLogsWithTime = await Promise.all(allLogs.map(async (logObj) => {
+        const l = {
+          ...logObj,
+          args: cloneArgs(logObj.args)
+        };
         let ts;
-        const name = l.fragment.name;
+        const name = l.fragment?.name || l.eventName;
+
+        // Inject loan amount to related events
+        if (name === 'PinjamanDisetujui') {
+          const loanId = Number(l.args.id || l.args[0]);
+          if (userLoanAmounts[loanId]) {
+            l.args.jumlah = userLoanAmounts[loanId];
+          }
+        } else if (name === 'PinjamanLunas' || name === 'PinjamanDitolak') {
+          const loanId = Number(l.args.loanId || l.args.id || l.args[0] || l.args[1]);
+          if (userLoanAmounts[loanId]) {
+            l.args.jumlah = userLoanAmounts[loanId];
+          }
+        }
+
+        // Decrypt name if AnggotaBaru
+        if (name === 'AnggotaBaru') {
+          let rawNama = l.args.nama || l.args[1] || "";
+          const userAddress = l.args.user || l.args[0];
+          if (rawNama === 'IPFS_USER' && userAddress && kop) {
+            try {
+              const member = await kop.dataAnggota(userAddress);
+              const profileHash = member.profileHash || member[3];
+              if (profileHash) {
+                rawNama = await fetchIPFSName(profileHash, userAddress, addr);
+              }
+            } catch (e) {
+              console.warn("Failed to fetch name from IPFS for user:", userAddress, e);
+            }
+          } else if (rawNama.includes(':')) {
+            rawNama = await decryptTextAPI(rawNama, addr);
+          }
+          l.args.nama = rawNama || "IPFS_USER";
+        }
 
         // Accurate timestamp extraction from args
-        if (name === 'DepositTercatat') ts = Number(l.args[3]);
-        else if (name === 'PenarikanTercatat') ts = Number(l.args[2]);
-        else if (name === 'PinjamanLunas') ts = Number(l.args[2]);
-        else if (name === 'SimpananBerjangkaDibuka') ts = Number(l.args[3]);
-        else if (name === 'SimpananBerjangkaDicairkan') ts = Number(l.args[3]);
-        else if (name === 'SHUDiterima') ts = Number(l.args[2]);
-        else if (name === 'AnggotaBaru') ts = Number(l.args[2]);
+        if (name === 'DepositTercatat') ts = Number(l.args[3] || l.args.waktu);
+        else if (name === 'PenarikanTercatat') ts = Number(l.args[2] || l.args.waktu);
+        else if (name === 'PinjamanLunas') ts = Number(l.args[2] || l.args.waktu);
+        else if (name === 'SimpananBerjangkaDibuka') ts = Number(l.args[3] || l.args.waktu);
+        else if (name === 'SimpananBerjangkaDicairkan') ts = Number(l.args[3] || l.args.waktu);
+        else if (name === 'SHUDiterima') ts = Number(l.args[2] || l.args.waktu);
+        else if (name === 'AnggotaBaru') ts = Number(l.args[2] || l.args.waktu || l.args.timestamp);
         else if (l.args.timestamp) ts = Number(l.args.timestamp);
         else if (l.args.waktu) ts = Number(l.args.waktu);
         else {
           try {
-            const block = await l.getBlock();
+            const block = await logObj.getBlock();
             ts = block.timestamp;
           } catch (e) {
             ts = Date.now() / 1000;
@@ -654,22 +803,74 @@ export const useKoperasi = (account) => {
         'BagiHasilDirilis',
         'MembershipClosed',
         'PengurusDitambahkan',
-        'ConfigUpdated'
+        'ConfigUpdated',
+        'AnggotaBaru',
+        'AnggotaRejoin'
       ];
+
+      // Map ID -> Amount from allLogsRaw (PinjamanDiajukan)
+      const globalLoanAmounts = {};
+      allLogsRaw.forEach(l => {
+        if (l.fragment?.name === 'PinjamanDiajukan' && l.args) {
+          const id = Number(l.args.id || l.args[0]);
+          const jumlah = l.args.jumlah || l.args[2];
+          if (id && jumlah) {
+            globalLoanAmounts[id] = jumlah;
+          }
+        }
+      });
 
       // Filter and Enhance with Accurate Timestamps (Consistent with User History)
       const filtered = allLogsRaw.filter(l =>
         l.fragment && relevantEvents.includes(l.fragment.name)
       );
 
-      const enhanced = await Promise.all(filtered.map(async (l) => {
+      const enhanced = await Promise.all(filtered.map(async (logObj) => {
+        const l = {
+          ...logObj,
+          args: cloneArgs(logObj.args)
+        };
         let ts;
-        const name = l.fragment.name;
+        const name = l.fragment?.name || l.eventName;
+
+        // Inject loan amount to related events
+        if (name === 'PinjamanDisetujui') {
+          const loanId = Number(l.args.id || l.args[0]);
+          if (globalLoanAmounts[loanId]) {
+            l.args.jumlah = globalLoanAmounts[loanId];
+          }
+        } else if (name === 'PinjamanLunas' || name === 'PinjamanDitolak') {
+          const loanId = Number(l.args.loanId || l.args.id || l.args[0] || l.args[1]);
+          if (globalLoanAmounts[loanId]) {
+            l.args.jumlah = globalLoanAmounts[loanId];
+          }
+        }
+
+        // Decrypt name if AnggotaBaru
+        if (name === 'AnggotaBaru') {
+          let rawNama = l.args.nama || l.args[1] || "";
+          const userAddress = l.args.user || l.args[0];
+          if (rawNama === 'IPFS_USER' && userAddress && activeKop) {
+            try {
+              const member = await activeKop.dataAnggota(userAddress);
+              const profileHash = member.profileHash || member[3];
+              if (profileHash) {
+                rawNama = await fetchIPFSName(profileHash, userAddress, account);
+              }
+            } catch (e) {
+              console.warn("Failed to fetch name from IPFS for user:", userAddress, e);
+            }
+          } else if (rawNama.includes(':')) {
+            rawNama = await decryptTextAPI(rawNama, account);
+          }
+          l.args.nama = rawNama || "IPFS_USER";
+        }
 
         // Extract timestamp from args if available (same as fetchHistory)
-        if (name === 'DepositTercatat') ts = Number(l.args[3]);
-        else if (name === 'PenarikanTercatat') ts = Number(l.args[2]);
-        else if (name === 'PinjamanLunas') ts = Number(l.args[2]);
+        if (name === 'DepositTercatat') ts = Number(l.args[3] || l.args.waktu);
+        else if (name === 'PenarikanTercatat') ts = Number(l.args[2] || l.args.waktu);
+        else if (name === 'PinjamanLunas') ts = Number(l.args[2] || l.args.waktu);
+        else if (name === 'AnggotaBaru') ts = Number(l.args[2] || l.args.waktu || l.args.timestamp);
         else if (l.args && l.args.waktu) {
           ts = Number(l.args.waktu);
         } else {
@@ -677,7 +878,7 @@ export const useKoperasi = (account) => {
           ts = l.extractedTimestamp || l.timestamp || 0;
           if (ts === 0) {
             try {
-              const block = await l.getBlock();
+              const block = await logObj.getBlock();
               ts = block.timestamp;
             } catch (e) {
               ts = Date.now() / 1000;
@@ -765,7 +966,7 @@ export const useKoperasi = (account) => {
       let midtransBal = '0';
       let adminPol = '0';
       try {
-        const res = await fetch('http://localhost:5000/api/balance');
+        const res = await authFetch('http://localhost:5000/api/balance', {}, account);
         const data = await res.json();
         if (data.success) {
           midtransBal = data.balance;
@@ -813,7 +1014,7 @@ export const useKoperasi = (account) => {
       console.log("[Admin] DIAGNOSTIC: Settings and storage mode fetched from Blockchain.");
       const setts = settsRaw;
 
-      setAdminConfig({
+      const blockchainConfig = {
         bunga: Number(bSimpanan),
         bungaPinjaman: Number(bPinjaman),
         denda: Number(denda),
@@ -825,7 +1026,54 @@ export const useKoperasi = (account) => {
         feeResiko: Number(setts[9]),
         deductUpfront: !!setts[2],
         useIPFSStorage: ipfsMode
-      });
+      };
+
+      // Check if blockchain matches our target settings (to detect RPC lag)
+      let matchesTarget = true;
+      if (targetSettingsRef.current) {
+        const target = targetSettingsRef.current;
+        if (target.bungaSimpanan !== undefined && blockchainConfig.bunga !== target.bungaSimpanan) matchesTarget = false;
+        if (target.bungaPinjaman !== undefined && blockchainConfig.bungaPinjaman !== target.bungaPinjaman) matchesTarget = false;
+        if (target.dendaHarian !== undefined && blockchainConfig.denda !== target.dendaHarian) matchesTarget = false;
+        if (target.pokok !== undefined && blockchainConfig.pokok !== target.pokok) matchesTarget = false;
+        if (target.wajib !== undefined && blockchainConfig.wajib !== target.wajib) matchesTarget = false;
+        if (target.minSaldo !== undefined && blockchainConfig.minSaldo !== target.minSaldo) matchesTarget = false;
+        if (target.feeAdmin !== undefined && blockchainConfig.feeAdmin !== target.feeAdmin) matchesTarget = false;
+        if (target.feeProvisi !== undefined && blockchainConfig.feeProvisi !== target.feeProvisi) matchesTarget = false;
+        if (target.feeResiko !== undefined && blockchainConfig.feeResiko !== target.feeResiko) matchesTarget = false;
+        if (target.deductUpfront !== undefined && blockchainConfig.deductUpfront !== target.deductUpfront) matchesTarget = false;
+        if (target.useIPFSStorage !== undefined && blockchainConfig.useIPFSStorage !== target.useIPFSStorage) matchesTarget = false;
+
+        if (!matchesTarget) {
+          console.log("[Admin] RPC node lag detected. Blockchain settings do not match target settings yet. Keeping optimistic settings and scheduling retry...");
+          
+          setAdminConfig(prev => {
+            const merged = { ...blockchainConfig, ...prev };
+            // Ensure target values are strictly preserved
+            if (target.bungaSimpanan !== undefined) merged.bunga = target.bungaSimpanan;
+            if (target.bungaPinjaman !== undefined) merged.bungaPinjaman = target.bungaPinjaman;
+            if (target.dendaHarian !== undefined) merged.denda = target.dendaHarian;
+            if (target.pokok !== undefined) merged.pokok = target.pokok;
+            if (target.wajib !== undefined) merged.wajib = target.wajib;
+            if (target.minSaldo !== undefined) merged.minSaldo = target.minSaldo;
+            if (target.feeAdmin !== undefined) merged.feeAdmin = target.feeAdmin;
+            if (target.feeProvisi !== undefined) merged.feeProvisi = target.feeProvisi;
+            if (target.feeResiko !== undefined) merged.feeResiko = target.feeResiko;
+            if (target.deductUpfront !== undefined) merged.deductUpfront = target.deductUpfront;
+            if (target.useIPFSStorage !== undefined) merged.useIPFSStorage = target.useIPFSStorage;
+            return merged;
+          });
+
+          // Schedule a retry
+          setTimeout(() => fetchAdminConfig(kop), 3000);
+          return;
+        } else {
+          console.log("[Admin] Blockchain settings matched target settings! Clearing target reference.");
+          targetSettingsRef.current = null;
+        }
+      }
+
+      setAdminConfig(blockchainConfig);
     } catch (e) {
       // [FIX] Silent fail for rate limiting/missing revert data. Polling will recover it.
       if (e.code === 'CALL_EXCEPTION' || e.message?.includes('rate limit')) {
@@ -841,13 +1089,47 @@ export const useKoperasi = (account) => {
     try {
       if (onProgress) onProgress("Mengupdate pengaturan global (Zero Gas)...");
       console.log("[Admin] DIAGNOSTIC: Sending Payload to Server:", JSON.stringify({ params }));
-      const response = await fetch('http://localhost:5000/api/gov/update-settings', {
+      const response = await authFetch('http://localhost:5000/api/gov/update-settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ params })
-      });
+      }, account);
       const data = await response.json();
       if (!data.success) throw new Error(data.error || "Gagal update settings");
+
+      // Set target settings ref for checking laggy RPC reads
+      const target = {
+        bungaSimpanan: params.bungaSimpanan !== undefined ? Number(params.bungaSimpanan) : undefined,
+        bungaPinjaman: params.bungaPinjaman !== undefined ? Number(params.bungaPinjaman) : undefined,
+        dendaHarian: params.dendaHarian !== undefined ? Number(params.dendaHarian) : undefined,
+        pokok: params.pokok !== undefined ? Number(params.pokok) : undefined,
+        wajib: params.wajib !== undefined ? Number(params.wajib) : undefined,
+        minSaldo: params.minSaldo !== undefined ? Number(params.minSaldo) : undefined,
+        feeAdmin: params.feeAdmin !== undefined ? Number(params.feeAdmin) : undefined,
+        feeProvisi: params.feeProvisi !== undefined ? Number(params.feeProvisi) : undefined,
+        feeResiko: params.feeResiko !== undefined ? Number(params.feeResiko) : undefined,
+        deductUpfront: params.deductUpfront !== undefined ? !!params.deductUpfront : undefined
+      };
+      targetSettingsRef.current = {
+        ...targetSettingsRef.current,
+        ...target
+      };
+
+      // Optimistic update of adminConfig state
+      setAdminConfig(prev => ({
+        ...prev,
+        bunga: params.bungaSimpanan !== undefined ? Number(params.bungaSimpanan) : prev.bunga,
+        bungaPinjaman: params.bungaPinjaman !== undefined ? Number(params.bungaPinjaman) : prev.bungaPinjaman,
+        denda: params.dendaHarian !== undefined ? Number(params.dendaHarian) : prev.denda,
+        pokok: params.pokok !== undefined ? Number(params.pokok) : prev.pokok,
+        wajib: params.wajib !== undefined ? Number(params.wajib) : prev.wajib,
+        minSaldo: params.minSaldo !== undefined ? Number(params.minSaldo) : prev.minSaldo,
+        feeAdmin: params.feeAdmin !== undefined ? Number(params.feeAdmin) : prev.feeAdmin,
+        feeProvisi: params.feeProvisi !== undefined ? Number(params.feeProvisi) : prev.feeProvisi,
+        feeResiko: params.feeResiko !== undefined ? Number(params.feeResiko) : prev.feeResiko,
+        deductUpfront: params.deductUpfront !== undefined ? !!params.deductUpfront : prev.deductUpfront
+      }));
+
       if (onProgress) onProgress("Berhasil update pengaturan!");
 
       // [FIX] Add a small delay to allow blockchain state to propagate
@@ -873,6 +1155,18 @@ export const useKoperasi = (account) => {
       if (onProgress) onProgress("Menunggu transaksi dikonfirmasi di blockchain...");
       await tx.wait();
       
+      // Set target storage mode ref
+      targetSettingsRef.current = {
+        ...targetSettingsRef.current,
+        useIPFSStorage: targetMode
+      };
+
+      // Optimistic update of adminConfig state
+      setAdminConfig(prev => ({
+        ...prev,
+        useIPFSStorage: targetMode
+      }));
+
       if (onProgress) onProgress("Mode penyimpanan berhasil diperbarui!");
       
       // Delay kecil agar blockchain state sinkron
@@ -889,11 +1183,11 @@ export const useKoperasi = (account) => {
   const closeMembership = async (memberAddress, onProgress) => {
     try {
       if (onProgress) onProgress("Menutup keanggotaan (Zero Gas)...");
-      const response = await fetch('http://localhost:5000/api/admin/close-membership', {
+      const response = await authFetch('http://localhost:5000/api/admin/close-membership', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ memberAddress })
-      });
+      }, account);
       const data = await response.json();
       if (!data.success) throw new Error(data.error || "Gagal tutup keanggotaan");
 
@@ -908,11 +1202,11 @@ export const useKoperasi = (account) => {
   const approveSurvey = async (loanId, note, onProgress) => {
     try {
       if (onProgress) onProgress('Memproses Persetujuan Survey (Admin)...');
-      const response = await fetch('http://localhost:5000/api/loan/survey', {
+      const response = await authFetch('http://localhost:5000/api/loan/survey', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ loanId, note })
-      });
+      }, account);
       const data = await response.json();
       if (!data.success) throw new Error(data.error || "Gagal approve survey");
       return data;
@@ -925,11 +1219,11 @@ export const useKoperasi = (account) => {
   const approveCommittee = async (loanId, onProgress) => {
     try {
       if (onProgress) onProgress('Memproses Persetujuan Komite (Admin)...');
-      const response = await fetch('http://localhost:5000/api/loan/committee', {
+      const response = await authFetch('http://localhost:5000/api/loan/committee', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ loanId })
-      });
+      }, account);
       const data = await response.json();
       if (!data.success) throw new Error(data.error || "Gagal approve komite");
       return data;
@@ -942,11 +1236,11 @@ export const useKoperasi = (account) => {
   const generateMonthlyBills = async (amount, onProgress) => {
     try {
       if (onProgress) onProgress('Menghasilkan tagihan bulanan massal...');
-      const response = await fetch('http://localhost:5000/api/gov/generate-bills', {
+      const response = await authFetch('http://localhost:5000/api/gov/generate-bills', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount })
-      });
+      }, account);
       const data = await response.json();
       if (!data.success) throw new Error(data.error || "Gagal generate bills");
       triggerTripleSync();
@@ -960,11 +1254,11 @@ export const useKoperasi = (account) => {
   const releaseProfitSharing = async (percentage, onProgress) => {
     try {
       if (onProgress) onProgress(`Membagikan SHU ${percentage}%...`);
-      const response = await fetch('http://localhost:5000/api/gov/release-sharing', {
+      const response = await authFetch('http://localhost:5000/api/gov/release-sharing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ percentage })
-      });
+      }, account);
       const data = await response.json();
       if (!data.success) throw new Error(data.error || "Gagal bagi hasil");
       triggerTripleSync();
@@ -977,16 +1271,18 @@ export const useKoperasi = (account) => {
 
   const fetchSystemStatus = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/health');
+      const res = await authFetch('http://localhost:5000/api/health', {}, account);
       const data = await res.json();
-      setSystemStatus({
-        xendit: data.xendit || 'OFFLINE',
-        tunnel: data.tunnel || 'OFFLINE',
-        blockchain: data.blockchain || 'OFFLINE',
-        adminBalance: data.adminBalance || '0',
-        webhookMismatch: data.webhookMismatch || false,
-        currentUrl: data.currentUrl || ''
-      });
+      if (data) {
+        setSystemStatus({
+          xendit: data.xendit || 'OFFLINE',
+          tunnel: data.tunnel || 'OFFLINE',
+          blockchain: data.blockchain || 'OFFLINE',
+          adminBalance: data.adminBalance || '0',
+          webhookMismatch: !!data.webhookMismatch,
+          currentUrl: data.currentUrl || ''
+        });
+      }
     } catch (e) {
       setSystemStatus({
         xendit: 'OFFLINE',
@@ -1001,11 +1297,11 @@ export const useKoperasi = (account) => {
 
   const confirmWebhookUpdate = async (url) => {
     try {
-      const res = await fetch('http://localhost:5000/api/health/confirm-webhook', {
+      const res = await authFetch('http://localhost:5000/api/health/confirm-webhook', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url })
-      });
+      }, account);
       const data = await res.json();
       if (data.success) {
         await fetchSystemStatus();
@@ -1070,13 +1366,27 @@ export const useKoperasi = (account) => {
 
       let rawNama = data.nama || data[2] || "";
       if (rawNama.includes(':')) {
-        rawNama = await decryptTextAPI(rawNama);
+        rawNama = await decryptTextAPI(rawNama, addr);
       }
       const rawProfileHash = data.profileHash || data[3] || "";
       if (rawNama === "" && rawProfileHash) {
-        const ipfsName = await fetchIPFSName(rawProfileHash, addr);
+        const ipfsName = await fetchIPFSName(rawProfileHash, addr, addr);
         if (ipfsName) rawNama = ipfsName;
       }
+
+      let rawNoHP = data.noHP || data[10] || "";
+      let rawNoKTP = data.noKTP || data[11] || "";
+      let rawAlamat = data.alamat || data[12] || "";
+      let rawGender = data.gender || data[13] || "";
+      let rawJob = data.job || data[14] || "";
+      let rawEmergency = data.emergency || data[15] || "";
+
+      if (rawNoHP && rawNoHP.includes(':')) rawNoHP = await decryptTextAPI(rawNoHP, addr);
+      if (rawNoKTP && rawNoKTP.includes(':')) rawNoKTP = await decryptTextAPI(rawNoKTP, addr);
+      if (rawAlamat && rawAlamat.includes(':')) rawAlamat = await decryptTextAPI(rawAlamat, addr);
+      if (rawGender && rawGender.includes(':')) rawGender = await decryptTextAPI(rawGender, addr);
+      if (rawJob && rawJob.includes(':')) rawJob = await decryptTextAPI(rawJob, addr);
+      if (rawEmergency && rawEmergency.includes(':')) rawEmergency = await decryptTextAPI(rawEmergency, addr);
 
       const formattedData = {
         terdaftar: data.terdaftar || data[0],
@@ -1089,7 +1399,13 @@ export const useKoperasi = (account) => {
         shuSudahDiambil: data.shuSudahDiambil || data[7] || 0n,
         branchId: Number(data.branchID !== undefined ? data.branchID : data[8]),
         limitPinjaman: data.limitPinjaman || data[9] || 0n,
-        currentBilling: await kop.tagihanWajib(addr)
+        currentBilling: await kop.tagihanWajib(addr),
+        noHP: rawNoHP,
+        noKTP: rawNoKTP,
+        alamat: rawAlamat,
+        gender: rawGender,
+        job: rawJob,
+        emergency: rawEmergency
       };
 
       setAnggotaData(formattedData);
@@ -1187,21 +1503,40 @@ export const useKoperasi = (account) => {
       const bills = await Promise.all(addrs.map(addr => kop.tagihanWajib(addr)));
 
       const members = await Promise.all(addrs.map(async (addr, i) => {
-        let nama = data[i].nama || "";
-        if (nama.includes(':')) {
-          nama = await decryptTextAPI(nama);
-        }
+        let nama = data[i].nama || data[i][2] || "";
+        let noHP = data[i].noHP || data[i][10] || "";
+        let noKTP = data[i].noKTP || data[i][11] || "";
+        let alamat = data[i].alamat || data[i][12] || "";
+        let gender = data[i].gender || data[i][13] || "";
+        let job = data[i].job || data[i][14] || "";
+        let emergency = data[i].emergency || data[i][15] || "";
+
+        if (nama.includes(':')) nama = await decryptTextAPI(nama, account);
+        if (noHP.includes(':')) noHP = await decryptTextAPI(noHP, account);
+        if (noKTP.includes(':')) noKTP = await decryptTextAPI(noKTP, account);
+        if (alamat.includes(':')) alamat = await decryptTextAPI(alamat, account);
+        if (gender.includes(':')) gender = await decryptTextAPI(gender, account);
+        if (job.includes(':')) job = await decryptTextAPI(job, account);
+        if (emergency.includes(':')) emergency = await decryptTextAPI(emergency, account);
+
         return {
           address: addr,
           nama: nama,
-          profileHash: data[i].profileHash || "", // [BARU] Hash IPFS
+          isIPFSStorage: !(data[i].nama || data[i][2]),
+          profileHash: data[i].profileHash || data[i][3] || "", // [BARU] Hash IPFS
           simpananPokok: data[i].simpananPokok,
           simpananWajib: data[i].simpananWajib,
           simpananSukarela: data[i].simpananSukarela,
           terdaftar: data[i].terdaftar,
           status: Number(data[i].status),
           branchId: Number(data[i].branchID),
-          tagihanWajib: bills[i]
+          tagihanWajib: bills[i],
+          noHP: noHP,
+          noKTP: noKTP,
+          alamat: alamat,
+          gender: gender,
+          job: job,
+          emergency: emergency
         };
       }));
 
@@ -1210,7 +1545,7 @@ export const useKoperasi = (account) => {
       // Staggered background lazy loading for IPFS names if blank on-chain
       members.forEach((m) => {
         if (!m.nama && m.profileHash) {
-          fetchIPFSName(m.profileHash, m.address).then((ipfsName) => {
+          fetchIPFSName(m.profileHash, m.address, account).then((ipfsName) => {
             if (ipfsName) {
               setMemberList((prevList) => {
                 const newList = [...prevList];
@@ -1366,11 +1701,11 @@ export const useKoperasi = (account) => {
       if (onProgress) onProgress('Memproses pendaftaran...');
       // 1. Simpan Pending ke Server (agar data tidak hilang jika tab tertutup)
       console.log("[Daftar] Saving pending reg to server for:", account);
-      const res = await fetch('http://localhost:5000/api/register', {
+      const res = await authFetch('http://localhost:5000/api/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ params })
-      });
+      }, account);
       const data = await res.json();
       if (!data.success) {
         // [FIX] If already registered on blockchain but not in DB, it's okay to proceed to payment
@@ -1403,7 +1738,7 @@ export const useKoperasi = (account) => {
       if (onProgress) onProgress('Membuat Invoice Xendit...');
 
       // 1. Create Invoice via Backend
-      const response = await fetch('http://localhost:5000/api/payment/create', {
+      const response = await authFetch('http://localhost:5000/api/payment/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1411,7 +1746,7 @@ export const useKoperasi = (account) => {
           amount: amountStr,
           isWajib: isWajib
         })
-      });
+      }, account);
 
       const data = await response.json();
       if (!data.success) {
@@ -1444,16 +1779,17 @@ export const useKoperasi = (account) => {
         }
       } catch (e) { console.warn("Failed to capture pre-payment baseline:", e); }
 
-      sessionStorage.setItem('isPaymentLocked', 'true');
-      sessionStorage.setItem('paymentType', actualType);
-      sessionStorage.setItem('paymentBaseline', baseline);
-      sessionStorage.setItem('paymentSuccess', 'false');
-      sessionStorage.setItem('activeExternalId', data.externalId || '');
+      const addrLower = account.toLowerCase();
+      sessionStorage.setItem(`isPaymentLocked_${addrLower}`, 'true');
+      sessionStorage.setItem(`paymentType_${addrLower}`, actualType);
+      sessionStorage.setItem(`paymentBaseline_${addrLower}`, baseline);
+      sessionStorage.setItem(`paymentSuccess_${addrLower}`, 'false');
+      sessionStorage.setItem(`activeExternalId_${addrLower}`, data.externalId || '');
 
       setPaymentType(actualType);
       setPaymentBaseline(BigInt(baseline));
       setIsPaymentLocked(true);
-      paymentChannel.postMessage({ type: 'PAYMENT_LOCKED' });
+      paymentChannel.postMessage({ type: 'PAYMENT_LOCKED', account });
 
       // [FIX] Return result directly from async function
       return { success: true, invoiceUrl: data.invoiceUrl, externalId: data.externalId };
@@ -1546,7 +1882,7 @@ export const useKoperasi = (account) => {
       // NEW: Save Bank Details to Server
       if (onProgress) onProgress('Menyimpan detail pencairan...');
       try {
-        await fetch('http://localhost:5000/api/loan/save-details', {
+        await authFetch('http://localhost:5000/api/loan/save-details', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1555,7 +1891,7 @@ export const useKoperasi = (account) => {
             bank: bank,
             accountNumber: accountNumber
           })
-        });
+        }, account);
       } catch (saveErr) {
         console.error("Failed to save loan details:", saveErr);
         // Don't fail the whole process if this fails, but it's risky.
@@ -1587,7 +1923,7 @@ export const useKoperasi = (account) => {
       if (onProgress) onProgress('Membuat Invoice Xendit untuk Angsuran...');
 
       // 1. Create Xendit Invoice for Repayment
-      const response = await fetch('http://localhost:5000/api/payment/repay', {
+      const response = await authFetch('http://localhost:5000/api/payment/repay', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1595,7 +1931,7 @@ export const useKoperasi = (account) => {
           loanId: pinjamanAktif.id.toString(),
           amount: jumlahStr
         })
-      });
+      }, account);
 
       const data = await response.json();
       if (!data.success) {
@@ -1607,11 +1943,12 @@ export const useKoperasi = (account) => {
       const baseline = sudahBayar.toString();
 
       // [CRITICAL] Synchronous persistence to prevent race condition on refresh/redirect
-      sessionStorage.setItem('isPaymentLocked', 'true');
-      sessionStorage.setItem('paymentType', 'angsuran');
-      sessionStorage.setItem('paymentBaseline', baseline);
-      sessionStorage.setItem('paymentSuccess', 'false');
-      sessionStorage.setItem('activeExternalId', data.externalId || '');
+      const addrLower = account.toLowerCase();
+      sessionStorage.setItem(`isPaymentLocked_${addrLower}`, 'true');
+      sessionStorage.setItem(`paymentType_${addrLower}`, 'angsuran');
+      sessionStorage.setItem(`paymentBaseline_${addrLower}`, baseline);
+      sessionStorage.setItem(`paymentSuccess_${addrLower}`, 'false');
+      sessionStorage.setItem(`activeExternalId_${addrLower}`, data.externalId || '');
 
       setPaymentType('angsuran');
       setPaymentBaseline(BigInt(baseline));
@@ -1701,7 +2038,7 @@ export const useKoperasi = (account) => {
 
       if (onProgress) onProgress('Mengirim permintaan penarikan (Zero Gas)...');
 
-      const response = await fetch('http://localhost:5000/api/withdraw', {
+      const response = await authFetch('http://localhost:5000/api/withdraw', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1710,7 +2047,7 @@ export const useKoperasi = (account) => {
           bank: bank,
           accountNumber: rekening
         })
-      });
+      }, account);
 
       const data = await response.json();
       if (!data.success) throw new Error(data.error || "Gagal menarik saldo");
@@ -1737,7 +2074,7 @@ export const useKoperasi = (account) => {
       if (onProgress) onProgress('Memeriksa likuiditas koperasi...');
       const loanData = await koperasiContract.dataPinjaman(idStr);
 
-      const res = await fetch('http://localhost:5000/api/balance');
+      const res = await authFetch('http://localhost:5000/api/balance', {}, account);
       const data = await res.json();
 
       // Safety check: if server is old or returns invalid data
@@ -1767,14 +2104,14 @@ export const useKoperasi = (account) => {
       // 2. Execute Approval & Disbursement via Server
       if (onProgress) onProgress('Memproses Persetujuan & Pencairan...');
 
-      const response = await fetch('http://localhost:5000/api/loan/approve-disburse', {
+      const response = await authFetch('http://localhost:5000/api/loan/approve-disburse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           loanId: idStr,
           userAddress: loanData.peminjam // Contract provides borrower address
         })
-      });
+      }, account);
 
       const resData = await response.json();
       if (!resData.success) {
@@ -1799,14 +2136,14 @@ export const useKoperasi = (account) => {
     try {
       if (onProgress) onProgress('Mengirim penolakan ke server (Zero Gas)...');
 
-      const response = await fetch('http://localhost:5000/api/loan/reject', {
+      const response = await authFetch('http://localhost:5000/api/loan/reject', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           loanId: idStr,
           reason: reason
         })
-      });
+      }, account);
 
       const data = await response.json();
       if (!data.success) throw new Error(data.error || "Gagal memproses penolakan di server");
@@ -1824,9 +2161,12 @@ export const useKoperasi = (account) => {
   const [fundStats, setFundStats] = useState({ contractBalance: '0', xenditBalance: '0' });
 
   const fetchFundStats = async () => {
-    // if (!koperasiContract || !idrContract) return; // Not strictly needed for API call
+    if (!account) return;
+    const addr = account.toLowerCase();
+    const token = localStorage.getItem(`auth_token_${addr}`);
+    if (!token) return;
     try {
-      const res = await fetch('http://localhost:5000/api/balance');
+      const res = await authFetch('http://localhost:5000/api/balance', {}, account);
       const data = await res.json();
 
       if (data.success) {
@@ -1847,9 +2187,9 @@ export const useKoperasi = (account) => {
 
       if (onProgress) onProgress('Meminta Server untuk Sinkronisasi...');
 
-      const response = await fetch('http://localhost:5000/api/sync-liquidity', {
+      const response = await authFetch('http://localhost:5000/api/sync-liquidity', {
         method: 'POST'
-      });
+      }, account);
       const syncData = await response.json();
       if (!syncData.success) throw new Error(syncData.error || "Gagal sinkronisasi via server");
 
@@ -2021,6 +2361,9 @@ export const useKoperasi = (account) => {
 
     // 4. Listen for messages from other tabs
     const handleMessage = (event) => {
+      if (event.data.account && account && event.data.account.toLowerCase() !== account.toLowerCase()) {
+        return;
+      }
       if (event.data.type === 'PAYMENT_LOCKED') {
         setIsPaymentLocked(true);
       } else if (event.data.type === 'PAYMENT_SUCCESS') {
@@ -2044,10 +2387,11 @@ export const useKoperasi = (account) => {
       console.log(`[Polling] Initializing baseline for ${paymentType}...`);
 
       let baselineValue = paymentBaseline;
+      const addrLower = account.toLowerCase();
 
       try {
         // Fetch BASELINE if not already set (e.g. if we missed the pre-payment capture)
-        if (baselineValue === 0n) {
+        if (sessionStorage.getItem(`paymentBaseline_${addrLower}`) === null || sessionStorage.getItem(`paymentBaseline_${addrLower}`) === undefined) {
           if (paymentType === 'simpanan' || paymentType === 'POKOK' || paymentType === 'wajib') {
             const member = await koperasiContract.dataAnggota(account);
             if (paymentType === 'wajib') {
@@ -2065,6 +2409,7 @@ export const useKoperasi = (account) => {
             }
           }
           setPaymentBaseline(baselineValue);
+          sessionStorage.setItem(`paymentBaseline_${addrLower}`, baselineValue.toString());
         }
 
         console.log(`[Polling] Baseline set: ${baselineValue.toString()}. Waiting for increase...`);
@@ -2075,7 +2420,7 @@ export const useKoperasi = (account) => {
           const member = await koperasiContract.dataAnggota(account);
           const isReg = member.terdaftar || (typeof member[0] === 'boolean' && member[0]);
           const simpananPokok = BigInt(member.simpananPokok.toString());
-          if (isReg && simpananPokok > baselineValue) alreadyFinished = true;
+          if (isReg && (simpananPokok > baselineValue)) alreadyFinished = true;
         } else if (paymentType === 'simpanan' || paymentType === 'wajib') {
           const member = await koperasiContract.dataAnggota(account);
           const currentBal = paymentType === 'wajib' ? member.simpananWajib : member.simpananSukarela;
@@ -2098,8 +2443,9 @@ export const useKoperasi = (account) => {
           await fetchUserData(account, koperasiContract, idrContract);
           setPaymentSuccess(true);
           setIsPaymentLocked(false);
-          sessionStorage.removeItem('isPaymentLocked');
-          sessionStorage.removeItem('paymentBaseline');
+          const addrLower = account.toLowerCase();
+          sessionStorage.removeItem(`isPaymentLocked_${addrLower}`);
+          sessionStorage.removeItem(`paymentBaseline_${addrLower}`);
           triggerTripleSync();
           return;
         }
@@ -2116,7 +2462,7 @@ export const useKoperasi = (account) => {
               if (paymentType === 'POKOK') {
                 const isReg = member.terdaftar || (typeof member[0] === 'boolean' && member[0]);
                 const simpananPokok = BigInt(member.simpananPokok.toString());
-                if (isReg && simpananPokok > baselineValue) {
+                if (isReg && (simpananPokok > baselineValue)) {
                   console.log("[Polling] Registration & Pokok Deposit confirmed on blockchain.");
                   successTriggered = true;
                 }
@@ -2151,9 +2497,10 @@ export const useKoperasi = (account) => {
               setIsPaymentLocked(false);
 
               // [NEW] Clear persistence once done
-              sessionStorage.removeItem('isPaymentLocked');
-              sessionStorage.removeItem('paymentType');
-              sessionStorage.removeItem('paymentBaseline');
+              const addrLower = account.toLowerCase();
+              sessionStorage.removeItem(`isPaymentLocked_${addrLower}`);
+              sessionStorage.removeItem(`paymentType_${addrLower}`);
+              sessionStorage.removeItem(`paymentBaseline_${addrLower}`);
 
               // [FIX] Unified Triple-Sync Strategy for final consistency
               triggerTripleSync();
@@ -2161,7 +2508,7 @@ export const useKoperasi = (account) => {
           } catch (pollErr) {
             console.warn("[Polling] Tick error:", pollErr);
           }
-        }, 4000); // Polling frequency 4s
+        }, 2000); // Polling frequency 2s
       } catch (baseErr) {
         console.error("[Polling] Failed to set baseline:", baseErr);
       }
@@ -2181,12 +2528,22 @@ export const useKoperasi = (account) => {
   const cancelPayment = () => {
     setIsPaymentLocked(false);
     setPaymentSuccess(false);
-    sessionStorage.removeItem('isPaymentLocked');
-    sessionStorage.removeItem('paymentType');
-    sessionStorage.removeItem('paymentBaseline');
-    sessionStorage.removeItem('paymentSuccess');
-    sessionStorage.removeItem('last_processed_payment');
-    sessionStorage.removeItem('activeExternalId');
+    if (account) {
+      const addrLower = account.toLowerCase();
+      sessionStorage.removeItem(`isPaymentLocked_${addrLower}`);
+      sessionStorage.removeItem(`paymentType_${addrLower}`);
+      sessionStorage.removeItem(`paymentBaseline_${addrLower}`);
+      sessionStorage.removeItem(`paymentSuccess_${addrLower}`);
+      sessionStorage.removeItem(`last_processed_payment_${addrLower}`);
+      sessionStorage.removeItem(`activeExternalId_${addrLower}`);
+    } else {
+      sessionStorage.removeItem('isPaymentLocked');
+      sessionStorage.removeItem('paymentType');
+      sessionStorage.removeItem('paymentBaseline');
+      sessionStorage.removeItem('paymentSuccess');
+      sessionStorage.removeItem('last_processed_payment');
+      sessionStorage.removeItem('activeExternalId');
+    }
     console.log("[Payment] Manual reset triggered. All payment states cleared.");
   };
 
@@ -2237,7 +2594,6 @@ export const useKoperasi = (account) => {
     // Admin Config & All Loans
     allLoans,
     adminConfig,
-    updateGlobalSettings,
     changeStorageMode,
     tambahLikuiditas,
     triggerTripleSync,
@@ -2252,7 +2608,6 @@ export const useKoperasi = (account) => {
     closeMembership,
     emergencyWithdraw,
     syncLiquidity,
-    cancelPayment,
     refreshAdminStats: () => fetchAdminStats(koperasiContract, idrContract),
     systemStatus,
     fetchSystemStatus,

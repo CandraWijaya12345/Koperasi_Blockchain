@@ -301,9 +301,6 @@ const AdminSettings = ({ config, onUpdate, onChangeStorageMode, isLoading, syste
 
     return (
         <div style={localStyles.container}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h2 style={localStyles.title}>Konfigurasi Sistem</h2>
-            </div>
 
             {/* --- DASHBOARD: KONFIGURASI AKTIF --- */}
             <div style={localStyles.summarySection}>

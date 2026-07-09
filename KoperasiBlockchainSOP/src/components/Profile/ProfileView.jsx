@@ -104,7 +104,8 @@ const ProfileView = ({ anggotaData, account, isPengurus, joiningDate }) => {
     const getPhotoUrl = (photoHash) => {
         if (!photoHash) return '';
         if (photoHash.startsWith('http')) return photoHash;
-        return `http://localhost:5000/api/ipfs/photo/${anggotaData.profileHash}/${account}`;
+        const token = account ? localStorage.getItem(`auth_token_${account.toLowerCase()}`) : null;
+        return `http://localhost:5000/api/ipfs/photo/${anggotaData.profileHash}/${account}${token ? `?token=${token}` : ''}`;
     };
 
     React.useEffect(() => {
@@ -113,7 +114,12 @@ const ProfileView = ({ anggotaData, account, isPengurus, joiningDate }) => {
                 setIpfsLoading(true);
                 try {
                     const userAddress = (account || '').toLowerCase();
-                    const res = await fetch(`http://localhost:5000/api/ipfs/metadata/${anggotaData.profileHash}/${userAddress}`);
+                    const token = account ? localStorage.getItem(`auth_token_${account.toLowerCase()}`) : null;
+                    const headers = {};
+                    if (token) {
+                        headers['Authorization'] = `Bearer ${token}`;
+                    }
+                    const res = await fetch(`http://localhost:5000/api/ipfs/metadata/${anggotaData.profileHash}/${userAddress}`, { headers });
                     if (res.ok) {
                         const data = await res.json();
                         setIpfsData(data);

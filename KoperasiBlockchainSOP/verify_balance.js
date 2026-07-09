@@ -15,8 +15,8 @@ async function main() {
         console.log("Connecting to RPC...");
         const provider = new ethers.JsonRpcProvider('https://rpc-amoy.polygon.technology/');
 
-        const idrAddress = "0xC71168cb6fB6AA39Be28b55BDeDd561D70181477";
-        const koperasiAddress = "0x3BE9a134d553De9841f9FB116FE6B290c78C95d6";
+        const idrAddress = "0x04bF97698f17A6c747Bb4062a1E95e1aB4C2498E";
+        const koperasiAddress = "0x947382476c37C987Fda55fbf3681b10E08328099";
 
         console.log(`Checking Balance of ${koperasiAddress} in rupiah ${idrAddress}...`);
         const idr = new ethers.Contract(idrAddress, abi, provider);

@@ -1,0 +1,718 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+
+contract SaldoIDR is ERC20, Ownable {
+    constructor() ERC20("Koperasi Rupiah", "IDR") Ownable(msg.sender) {}
+
+    function mint(address to, uint256 amount) public onlyOwner {
+        _mint(to, amount);
+    }
+
+    function burn(address from, uint256 amount) public onlyOwner {
+        _burn(from, amount);
+    }
+
+    function transfer(address, uint256) public pure override returns (bool) {
+        revert("Closed Loop: Transfer antar user tidak diizinkan. Gunakan Withdrawal.");
+    }
+
+    function transferFrom(address, address, uint256) public pure override returns (bool) {
+        revert("Closed Loop: Transfer antar user tidak diizinkan.");
+    }
+}
+
+contract KoperasiSimpanPinjam is ReentrancyGuard, Ownable {
+    using SafeERC20 for SaldoIDR;
+
+    SaldoIDR public saldoIDR;
+    mapping(address => bool) public isPengurus;
+
+    enum StatusPinjaman { Pending, Surveyed, CommitteeApproved, Aktif, Lunas, Ditolak, Macet }
+    enum MemberStatus { None, Active, Inactive, Suspended, Quit } 
+    enum Kolektibilitas { Lancar, DPK, KurangLancar, Diragukan, Macet }
+
+    struct Anggota {
+        bool terdaftar;
+        MemberStatus status;
+        string nama;
+        string profileHash;
+        uint256 simpananPokok;
+        uint256 simpananWajib;
+        uint256 simpananSukarela;
+        uint256 shuSudahDiambil;
+        uint256 branchID;
+        uint256 limitPinjaman;
+        string noHP;
+        string noKTP;
+        string alamat;
+        string gender;
+        string job;
+        string emergency;
+    }
+
+    struct Pinjaman {
+        uint256 id;
+        address peminjam;
+        uint256 jumlahPinjaman;
+        uint256 totalHarusDibayar;
+        uint256 sudahDibayar;
+        uint256 tenorBulan;
+        uint256 waktuJatuhTempo;
+        StatusPinjaman status;
+        Kolektibilitas quality;
+        bool isRestructured;
+        string surveyNote;
+        address approvedByCommittee;
+    }
+
+    struct SimpananBerjangka {
+        uint256 amount;
+        uint256 lockUntil;
+        uint256 interestRate;
+        bool active;
+    }
+
+    struct GlobalConfig {
+        bool autoCollectibility;
+        bool multiBranchEnabled;
+        bool deductFeesUpfront;
+        bool isPeriodClosed;
+        uint256 nominalSimpananPokok;
+        uint256 nominalAdmPendaftaran;
+        uint256 minSaldo;
+        uint256 feeAdministrasi;
+        uint256 feeProvisiPersen;
+        uint256 feeResikoPersen;
+        uint256 currentLiquidityPool;
+    }
+
+    struct RegisterParams {
+        address user;
+        string nama;
+        string profileHash; 
+        uint256 branchId;
+        string noHP;
+        string noKTP;
+        string alamat;
+        string gender;
+        string job;
+        string emergency;
+    }
+
+    struct SettingsParams {
+        bool autoColl;
+        bool multiBranch;
+        bool deductUpfront;
+        bool closePeriod;
+        uint256 pokok;
+        uint256 adm;
+        uint256 minSaldo;
+        uint256 feeAdmin;
+        uint256 feeProvisi;
+        uint256 feeResiko;
+    }
+
+    GlobalConfig public settings;
+    mapping(address => SimpananBerjangka[]) public userTimeDeposits;
+
+    mapping(address => Anggota) public dataAnggota;
+    mapping(uint256 => Pinjaman) public dataPinjaman;
+    mapping(address => uint256) public idPinjamanAktifAnggota;
+    mapping(address => uint256) public loanBalance;
+    mapping(address => uint256) public tagihanWajib;
+
+    address[] public listAlamatAnggota;
+    uint256 public idPinjamanTerakhir;
+    uint256 public jumlahAnggota;
+    
+    uint256 public bungaSimpananTahunanPersen = 5;
+    uint256 public bungaPinjamanTahunanPersen = 12;
+    uint256 public dendaHarianPermil = 1;
+
+    uint256 public totalSimpananSeluruhAnggota;
+    uint256 public profitBelumDibagi;
+    uint256 public totalSHUDibagikan;
+
+    bool public useIPFSStorage = false;
+    event StorageModeUpdated(address indexed admin, bool useIPFS, uint256 timestamp);
+
+    event AnggotaBaru(address indexed user, string nama, uint256 timestamp);
+    event AnggotaRejoin(address indexed user, uint256 timestamp); 
+    event DepositTercatat(address indexed user, uint256 jumlah, string jenis, uint256 timestamp);
+    event PenarikanTercatat(address indexed user, uint256 jumlah, uint256 timestamp);
+    event PinjamanDiajukan(uint256 id, address indexed peminjam, uint256 jumlah, uint256 tenor);
+    event PinjamanDisetujui(uint256 id, address indexed peminjam, uint256 jatubTempo);
+    event PinjamanDitolak(uint256 id, address indexed peminjam, string alasan);
+    event PinjamanLunas(uint256 indexed loanId, address indexed peminjam, uint256 timestamp);
+    event SettingsUpdated(address indexed admin, uint256 timestamp);
+    event LiquiditySynced(uint256 newPool, uint256 timestamp);
+    event SurveyApproved(uint256 indexed loanId, string note);
+    event CommitteeApproved(uint256 indexed loanId, address committee);
+    event MembershipClosed(address indexed member, uint256 refundAmount);
+    event CollectibilityUpdated(uint256 indexed loanId, Kolektibilitas status);
+    event RestrukturTercatat(uint256 indexed loanId, uint256 newTotal, uint256 newTenor);
+    event MemberProfileUpdated(address indexed member, string field, uint256 timestamp);
+    event TagihanDibuat(uint256 nominalTotal, uint256 timestamp);
+    event BagiHasilDirilis(uint256 nominalTotal, uint256 timestamp);
+    event BagiHasilBatchDirilis(uint256 nominalTotal, uint256 anggotaTerproses, uint256 timestamp);
+    event SHUDiterima(address indexed user, uint256 jumlah, uint256 timestamp); 
+    event DendaDiterapkan(uint256 indexed loanId, uint256 denda);
+    event AngsuranMasuk(uint256 indexed loanId, address indexed peminjam, uint256 jumlah);
+    event SimpananBerjangkaDibuka(address indexed user, uint256 amount, uint256 tenorBulan, uint256 timestamp); 
+    event SimpananBerjangkaDicairkan(address indexed user, uint256 amount, uint256 bunga, uint256 timestamp);
+    event ConfigUpdated(string key, uint256 value);
+    event PengurusDitambahkan(address indexed admin, uint256 timestamp); 
+
+    modifier hanyaPengurus() {
+        require(isPengurus[msg.sender] || msg.sender == owner(), "Hanya Admin/Pengurus");
+        _;
+    }
+
+    modifier hanyaAnggota() {
+        require(dataAnggota[msg.sender].terdaftar, "Belum terdaftar anggota");
+        _;
+    }
+
+    modifier openPeriod() {
+        require(!settings.isPeriodClosed, "Periode transaksi sudah ditutup");
+        _;
+    }
+
+    constructor() Ownable(msg.sender) {
+        isPengurus[msg.sender] = true;
+        saldoIDR = new SaldoIDR();
+    }
+
+    function setBungaSimpanan(uint256 _persenTahunan) external hanyaPengurus {
+        require(_persenTahunan <= 9, "Regulasi: Max 9% per tahun");
+        bungaSimpananTahunanPersen = _persenTahunan;
+        emit ConfigUpdated("BungaSimpanan", _persenTahunan);
+    }
+
+    function setBungaPinjaman(uint256 _persenTahunan) external hanyaPengurus {
+        require(_persenTahunan <= 24, "Regulasi: Max 24% per tahun");
+        bungaPinjamanTahunanPersen = _persenTahunan;
+        emit ConfigUpdated("BungaPinjaman", _persenTahunan);
+    }
+
+    function setDendaHarian(uint256 _permil) external hanyaPengurus {
+        require(_permil <= 10, "Max 1% per hari");
+        dendaHarianPermil = _permil;
+        emit ConfigUpdated("DendaHarian", _permil);
+    }
+
+    function tambahPengurus(address _admin) external onlyOwner {
+        isPengurus[_admin] = true;
+        emit PengurusDitambahkan(_admin, block.timestamp); 
+    }
+
+    function setStorageMode(bool _useIPFS) external hanyaPengurus {
+        useIPFSStorage = _useIPFS;
+        emit StorageModeUpdated(msg.sender, _useIPFS, block.timestamp);
+    }
+
+    function updateGlobalSettings(SettingsParams calldata p) external hanyaPengurus {
+        settings.autoCollectibility = p.autoColl;
+        settings.multiBranchEnabled = p.multiBranch;
+        settings.deductFeesUpfront = p.deductUpfront;
+        settings.isPeriodClosed = p.closePeriod;
+        settings.nominalSimpananPokok = p.pokok;
+        settings.nominalAdmPendaftaran = p.adm;
+        settings.minSaldo = p.minSaldo;
+        settings.feeAdministrasi = p.feeAdmin;
+        settings.feeProvisiPersen = p.feeProvisi;
+        settings.feeResikoPersen = p.feeResiko;
+        emit SettingsUpdated(msg.sender, block.timestamp);
+    }
+
+    function updateLiquidityPool(uint256 _newBalance) external hanyaPengurus {
+        settings.currentLiquidityPool = _newBalance;
+        emit LiquiditySynced(_newBalance, block.timestamp);
+    }
+
+    function registerMember(RegisterParams calldata p) external hanyaPengurus nonReentrant {
+        Anggota storage m = dataAnggota[p.user];
+        require(!m.terdaftar || m.status == MemberStatus.Quit, "User sudah terdaftar dan aktif");
+
+        bool isRejoining = m.terdaftar && m.status == MemberStatus.Quit;
+
+        m.terdaftar = true;
+        m.status = MemberStatus.Active;
+        
+        if (useIPFSStorage) {
+            require(bytes(p.profileHash).length > 0, "IPFS Hash wajib diisi pada mode IPFS");
+            m.nama = "";
+            m.profileHash = p.profileHash;
+            m.noHP = "";
+            m.noKTP = "";
+            m.alamat = "";
+            m.gender = "";
+            m.job = "";
+            m.emergency = "";
+        } else {
+            require(bytes(p.nama).length > 0, "Nama wajib diisi pada mode On-Chain");
+            m.nama = p.nama;
+            m.profileHash = p.profileHash;
+            m.noHP = p.noHP;
+            m.noKTP = p.noKTP;
+            m.alamat = p.alamat;
+            m.gender = p.gender;
+            m.job = p.job;
+            m.emergency = p.emergency;
+        }
+        
+        m.branchID = settings.multiBranchEnabled ? p.branchId : 0;
+        m.simpananPokok = 0; 
+
+        if (!isRejoining) {
+            listAlamatAnggota.push(p.user);
+            jumlahAnggota++;
+            emit AnggotaBaru(p.user, useIPFSStorage ? "IPFS_USER" : p.nama, block.timestamp);
+        } else {
+            emit AnggotaRejoin(p.user, block.timestamp); 
+        }
+    }
+
+    function updateMemberProfile(
+        address _user, string memory _nama, string memory _profileHash
+    ) external hanyaPengurus {
+        require(dataAnggota[_user].terdaftar, "Anggota tidak terdaftar");
+        
+        if (useIPFSStorage) {
+            require(bytes(_profileHash).length > 0, "IPFS Hash wajib diisi pada mode IPFS");
+            dataAnggota[_user].nama = "";
+            dataAnggota[_user].profileHash = _profileHash;
+        } else {
+            require(bytes(_nama).length > 0, "Nama wajib diisi pada mode On-Chain");
+            dataAnggota[_user].nama = _nama;
+            dataAnggota[_user].profileHash = _profileHash;
+        }
+        
+        emit MemberProfileUpdated(_user, "FullProfile", block.timestamp);
+    }
+
+    function recordDeposit(address _user, uint256 _amount, bool _isWajib) external hanyaPengurus openPeriod nonReentrant {
+        require(dataAnggota[_user].terdaftar, "User tidak dikenal");
+        saldoIDR.mint(_user, _amount);
+        
+        uint256 alokasi = _amount;
+        uint256 targetPokok = settings.nominalSimpananPokok;
+        uint256 currentPokok = dataAnggota[_user].simpananPokok;
+
+        if (currentPokok < targetPokok) {
+            uint256 shortfall = targetPokok - currentPokok;
+            uint256 toPokok = (alokasi >= shortfall) ? shortfall : alokasi;
+            
+            dataAnggota[_user].simpananPokok += toPokok;
+            alokasi -= toPokok;
+            
+            emit DepositTercatat(_user, toPokok, "Simpanan Pokok", block.timestamp);
+        }
+
+        if (alokasi > 0) {
+            if (_isWajib) {
+                dataAnggota[_user].simpananWajib += alokasi;
+                if (tagihanWajib[_user] >= alokasi) tagihanWajib[_user] -= alokasi;
+                else tagihanWajib[_user] = 0;
+                
+                emit DepositTercatat(_user, alokasi, "Simpanan Wajib", block.timestamp);
+            } else {
+                dataAnggota[_user].simpananSukarela += alokasi;
+                emit DepositTercatat(_user, alokasi, "Simpanan Sukarela", block.timestamp);
+            }
+        }
+
+        totalSimpananSeluruhAnggota += _amount;
+        settings.currentLiquidityPool += _amount;
+    }
+
+    function memberWithdraw(uint256 _amount) external hanyaAnggota openPeriod nonReentrant {
+        require(idPinjamanAktifAnggota[msg.sender] == 0, "Selesaikan pinjaman aktif/pending");
+        
+        uint256 currentBal = dataAnggota[msg.sender].simpananSukarela;
+        require(currentBal >= _amount, "Saldo sukarela kurang");
+        require(currentBal - _amount >= settings.minSaldo, "Melampaui batas minimal saldo");
+        require(settings.currentLiquidityPool >= _amount, "Likuiditas koperasi tidak cukup");
+        
+        saldoIDR.burn(msg.sender, _amount);
+        dataAnggota[msg.sender].simpananSukarela -= _amount;
+        totalSimpananSeluruhAnggota -= _amount;
+        settings.currentLiquidityPool -= _amount;
+
+        emit PenarikanTercatat(msg.sender, _amount, block.timestamp);
+    }
+
+    function recordWithdrawal(address _user, uint256 _amount) external hanyaPengurus openPeriod nonReentrant {
+        require(idPinjamanAktifAnggota[_user] == 0, "Ada pinjaman aktif/pending");
+
+        uint256 currentBal = dataAnggota[_user].simpananSukarela;
+        require(currentBal >= _amount, "Saldo sukarela kurang");
+        require(currentBal - _amount >= settings.minSaldo, "Melampaui batas minimal saldo");
+        require(settings.currentLiquidityPool >= _amount, "Likuiditas koperasi tidak cukup");
+        
+        saldoIDR.burn(_user, _amount);
+        dataAnggota[_user].simpananSukarela -= _amount;
+        totalSimpananSeluruhAnggota -= _amount;
+        settings.currentLiquidityPool -= _amount;
+
+        emit PenarikanTercatat(_user, _amount, block.timestamp);
+    }
+
+    function generateMonthlyBills(uint256 _nominal) external hanyaPengurus {
+        for (uint i = 0; i < listAlamatAnggota.length; i++) {
+            address member = listAlamatAnggota[i];
+            if (dataAnggota[member].status == MemberStatus.Active) {
+                tagihanWajib[member] += _nominal;
+            }
+        }
+        emit TagihanDibuat(_nominal * jumlahAnggota, block.timestamp);
+    }
+
+    function bayarTagihanWajib(uint256 _amount) external hanyaAnggota openPeriod nonReentrant {
+        require(tagihanWajib[msg.sender] >= _amount, "Melebihi tagihan");
+        require(dataAnggota[msg.sender].simpananSukarela >= _amount, "Saldo sukarela kurang");
+        
+        dataAnggota[msg.sender].simpananSukarela -= _amount;
+        tagihanWajib[msg.sender] -= _amount;
+        dataAnggota[msg.sender].simpananWajib += _amount;
+        
+        emit DepositTercatat(msg.sender, _amount, "Wajib", block.timestamp);
+    }
+
+    function rilisBagiHasil(uint256 _percentage) external hanyaPengurus nonReentrant {
+        require(_percentage <= 100, "Max 100%");
+        uint256 amountToDistribute = (profitBelumDibagi * _percentage) / 100;
+        require(amountToDistribute > 0 && totalSimpananSeluruhAnggota > 0, "No profit/members");
+
+        for (uint i = 0; i < listAlamatAnggota.length; i++) {
+            address member = listAlamatAnggota[i];
+            if (dataAnggota[member].status == MemberStatus.Active) {
+                uint256 bal = saldoIDR.balanceOf(member);
+                if (bal > 0) {
+                    uint256 memberShare = (amountToDistribute * bal) / totalSimpananSeluruhAnggota;
+                    if (memberShare > 0) {
+                        saldoIDR.mint(member, memberShare);
+                        dataAnggota[member].simpananSukarela += memberShare;
+                        
+                        emit SHUDiterima(member, memberShare, block.timestamp); 
+                    }
+                }
+            }
+        }
+        profitBelumDibagi -= amountToDistribute;
+        totalSHUDibagikan += amountToDistribute;
+        emit BagiHasilDirilis(amountToDistribute, block.timestamp);
+    }
+
+    function rilisBagiHasilBatch(
+        uint256 _totalAmountToDistribute, 
+        uint256 _totalSimpananSnapshot, 
+        uint256 _startIndex, 
+        uint256 _count
+    ) external hanyaPengurus nonReentrant {
+        require(_totalAmountToDistribute > 0 && _totalSimpananSnapshot > 0, "Invalid params");
+
+        uint256 limit = _startIndex + _count;
+        if (limit > listAlamatAnggota.length) limit = listAlamatAnggota.length;
+
+        uint256 distributedInThisBatch = 0; 
+
+        for (uint i = _startIndex; i < limit; i++) {
+            address member = listAlamatAnggota[i];
+            if (dataAnggota[member].status == MemberStatus.Active) {
+                uint256 bal = saldoIDR.balanceOf(member);
+                if (bal > 0) {
+                    uint256 memberShare = (_totalAmountToDistribute * bal) / _totalSimpananSnapshot;
+                    if (memberShare > 0) {
+                        saldoIDR.mint(member, memberShare);
+                        dataAnggota[member].simpananSukarela += memberShare;
+                        distributedInThisBatch += memberShare; 
+                        
+                        emit SHUDiterima(member, memberShare, block.timestamp); 
+                    }
+                }
+            }
+        }
+        
+        if (distributedInThisBatch > 0) {
+            profitBelumDibagi -= distributedInThisBatch;
+            totalSHUDibagikan += distributedInThisBatch;
+        }
+
+        emit BagiHasilBatchDirilis(distributedInThisBatch, limit - _startIndex, block.timestamp);
+    }
+
+    function ajukanPinjaman(uint256 _amount, uint256 _tenorBulan) external hanyaAnggota openPeriod nonReentrant {
+        require(idPinjamanAktifAnggota[msg.sender] == 0, "Ada pinjaman aktif");
+        
+        uint256 totalBerjangka = 0;
+        for (uint i = 0; i < userTimeDeposits[msg.sender].length; i++) {
+            if (userTimeDeposits[msg.sender][i].active) {
+                totalBerjangka += userTimeDeposits[msg.sender][i].amount;
+            }
+        }
+
+        uint256 collateralAman = dataAnggota[msg.sender].simpananPokok + 
+                                 dataAnggota[msg.sender].simpananWajib + 
+                                 dataAnggota[msg.sender].simpananSukarela + 
+                                 totalBerjangka;
+                                 
+        require(_amount <= collateralAman * 3, "Over jaminan total ekuitas");
+
+        idPinjamanTerakhir++;
+        uint256 bungaTotal = (_amount * bungaPinjamanTahunanPersen * _tenorBulan) / 1200;
+
+        Pinjaman storage p = dataPinjaman[idPinjamanTerakhir];
+        p.id = idPinjamanTerakhir;
+        p.peminjam = msg.sender;
+        p.jumlahPinjaman = _amount;
+        p.totalHarusDibayar = _amount + bungaTotal;
+        p.sudahDibayar = 0;
+        p.tenorBulan = _tenorBulan;
+        p.waktuJatuhTempo = 0;
+        p.status = StatusPinjaman.Pending;
+        p.quality = Kolektibilitas.Lancar;
+        p.isRestructured = false;
+
+        idPinjamanAktifAnggota[msg.sender] = idPinjamanTerakhir;
+        emit PinjamanDiajukan(idPinjamanTerakhir, msg.sender, _amount, _tenorBulan);
+    }
+
+    function approveSurvey(uint256 _loanId, string memory _note) external hanyaPengurus {
+        Pinjaman storage p = dataPinjaman[_loanId];
+        require(p.status == StatusPinjaman.Pending, "Status must be Pending");
+        p.status = StatusPinjaman.Surveyed;
+        p.surveyNote = _note;
+        emit SurveyApproved(_loanId, _note);
+    }
+
+    function approveCommittee(uint256 _loanId) external hanyaPengurus {
+        Pinjaman storage p = dataPinjaman[_loanId];
+        require(p.status == StatusPinjaman.Surveyed, "Status must be Surveyed");
+        p.status = StatusPinjaman.CommitteeApproved;
+        p.approvedByCommittee = msg.sender;
+        emit CommitteeApproved(_loanId, msg.sender);
+    }
+
+    function setujuiPinjaman(uint256 _loanId) external hanyaPengurus openPeriod nonReentrant {
+        Pinjaman storage p = dataPinjaman[_loanId];
+        require(p.status == StatusPinjaman.CommitteeApproved, "Harus melalui tahap Komite");
+
+        uint256 feeProvisi = (p.jumlahPinjaman * settings.feeProvisiPersen) / 100;
+        uint256 feeResiko = (p.jumlahPinjaman * settings.feeResikoPersen) / 100;
+        uint256 totalBiayaLainnya = settings.feeAdministrasi + feeProvisi + feeResiko;
+
+        uint256 amountToDisburse = p.jumlahPinjaman;
+
+        if (settings.deductFeesUpfront) {
+            require(p.jumlahPinjaman > totalBiayaLainnya, "Biaya melebihi pinjaman");
+            amountToDisburse = p.jumlahPinjaman - totalBiayaLainnya;
+            profitBelumDibagi += totalBiayaLainnya; 
+        } else {
+            p.totalHarusDibayar += totalBiayaLainnya;
+        }
+        
+        require(settings.currentLiquidityPool >= amountToDisburse, "Likuiditas Koperasi tidak cukup");
+        settings.currentLiquidityPool -= amountToDisburse;
+
+        p.status = StatusPinjaman.Aktif;
+        p.waktuJatuhTempo = block.timestamp + (p.tenorBulan * 30 days);
+        loanBalance[p.peminjam] += p.totalHarusDibayar;
+
+        emit PinjamanDisetujui(_loanId, p.peminjam, p.waktuJatuhTempo);
+    }
+
+    function recordAngsuran(uint256 _loanId, uint256 _amount) external hanyaPengurus openPeriod nonReentrant {
+        settings.currentLiquidityPool += _amount;
+        _prosesPelunasan(_loanId, _amount);
+    }
+
+    function bayarAngsuranInternal(uint256 _loanId, uint256 _amount) external hanyaAnggota openPeriod nonReentrant {
+        require(dataAnggota[msg.sender].simpananSukarela >= _amount, "Saldo sukarela kurang");
+        
+        dataAnggota[msg.sender].simpananSukarela -= _amount;
+        saldoIDR.burn(msg.sender, _amount); 
+        totalSimpananSeluruhAnggota -= _amount;
+        
+        _prosesPelunasan(_loanId, _amount);
+    }
+
+    function _prosesPelunasan(uint256 _loanId, uint256 _amount) internal {
+        Pinjaman storage p = dataPinjaman[_loanId];
+        require(p.status == StatusPinjaman.Aktif, "Pinjaman tidak aktif");
+
+        uint256 amountToPrincipal = _amount;
+
+        if (block.timestamp > p.waktuJatuhTempo) {
+            uint256 overdueDays = (block.timestamp - p.waktuJatuhTempo) / 1 days;
+            if (overdueDays > 0) {
+                uint256 denda = (p.totalHarusDibayar * dendaHarianPermil * overdueDays) / 1000;
+                if (_amount > denda) {
+                    profitBelumDibagi += denda;
+                    amountToPrincipal = _amount - denda;
+                } else {
+                    profitBelumDibagi += _amount;
+                    amountToPrincipal = 0;
+                }
+                emit DendaDiterapkan(_loanId, denda);
+            }
+        }
+
+        p.sudahDibayar += amountToPrincipal;
+        if(loanBalance[p.peminjam] >= amountToPrincipal) loanBalance[p.peminjam] -= amountToPrincipal; 
+        else loanBalance[p.peminjam] = 0;
+
+        if (p.sudahDibayar >= p.totalHarusDibayar) {
+            p.status = StatusPinjaman.Lunas;
+            idPinjamanAktifAnggota[p.peminjam] = 0;
+            if (p.totalHarusDibayar > p.jumlahPinjaman) {
+                profitBelumDibagi += (p.totalHarusDibayar - p.jumlahPinjaman); 
+            }
+            emit PinjamanLunas(_loanId, p.peminjam, block.timestamp);
+        }
+
+        emit AngsuranMasuk(_loanId, p.peminjam, _amount);
+    }
+
+    function tolakPinjaman(uint256 _loanId, string memory _alasan) external hanyaPengurus {
+        Pinjaman storage p = dataPinjaman[_loanId];
+        require(
+            p.status == StatusPinjaman.Pending || 
+            p.status == StatusPinjaman.Surveyed || 
+            p.status == StatusPinjaman.CommitteeApproved, 
+            "Status invalid"
+        );
+        p.status = StatusPinjaman.Ditolak;
+        idPinjamanAktifAnggota[p.peminjam] = 0; 
+        emit PinjamanDitolak(_loanId, p.peminjam, _alasan);
+    }
+
+    function updateCollectibilityStatus(uint256 _loanId, Kolektibilitas _status) external hanyaPengurus {
+        dataPinjaman[_loanId].quality = _status;
+        emit CollectibilityUpdated(_loanId, _status);
+    }
+
+    function restrukturPinjaman(uint256 _loanId, uint256 _newTenor, uint256 _newTotal) external hanyaPengurus {
+        Pinjaman storage p = dataPinjaman[_loanId];
+        require(p.status == StatusPinjaman.Aktif, "Hanya untuk pinjaman aktif");
+        p.tenorBulan = _newTenor;
+        p.totalHarusDibayar = _newTotal;
+        p.waktuJatuhTempo = block.timestamp + (_newTenor * 30 days);
+        p.isRestructured = true;
+        emit RestrukturTercatat(_loanId, _newTotal, _newTenor);
+    }
+
+    function openSimpananBerjangka(uint256 _amount, uint256 _tenorBulan) external hanyaAnggota openPeriod nonReentrant {
+        require(dataAnggota[msg.sender].simpananSukarela >= _amount, "Saldo sukarela kurang");
+        
+        uint256 estimasiBunga = (_amount * bungaSimpananTahunanPersen * _tenorBulan) / 1200;
+
+        userTimeDeposits[msg.sender].push(SimpananBerjangka({
+            amount: _amount,
+            lockUntil: block.timestamp + (_tenorBulan * 30 days),
+            interestRate: estimasiBunga, 
+            active: true
+        }));
+
+        dataAnggota[msg.sender].simpananSukarela -= _amount;
+        saldoIDR.burn(msg.sender, _amount);
+        totalSimpananSeluruhAnggota -= _amount;
+        
+        emit SimpananBerjangkaDibuka(msg.sender, _amount, _tenorBulan, block.timestamp); 
+    }
+
+    function cairkanSimpananBerjangka(uint256 _index) external hanyaAnggota openPeriod nonReentrant {
+        require(_index < userTimeDeposits[msg.sender].length, "Data tidak ditemukan");
+        SimpananBerjangka storage sb = userTimeDeposits[msg.sender][_index];
+        require(sb.active, "Sudah dicairkan");
+        require(block.timestamp >= sb.lockUntil, "Belum jatuh tempo");
+
+        sb.active = false;
+        
+        dataAnggota[msg.sender].simpananSukarela += sb.amount;
+        
+        saldoIDR.mint(msg.sender, sb.amount);
+        totalSimpananSeluruhAnggota += sb.amount;
+        
+        uint256 bungaCair = 0;
+        if (sb.interestRate > 0 && profitBelumDibagi >= sb.interestRate) {
+            profitBelumDibagi -= sb.interestRate;
+            bungaCair = sb.interestRate;
+            dataAnggota[msg.sender].simpananSukarela += bungaCair;
+            
+            saldoIDR.mint(msg.sender, bungaCair);
+            totalSimpananSeluruhAnggota += bungaCair;
+        }
+        
+        emit SimpananBerjangkaDicairkan(msg.sender, sb.amount, bungaCair, block.timestamp);
+    }
+
+    function tutupKeanggotaan(address _member) external hanyaPengurus nonReentrant {
+        require(dataAnggota[_member].terdaftar, "Anggota tidak ditemukan");
+        require(loanBalance[_member] == 0 && idPinjamanAktifAnggota[_member] == 0, "Ada pinjaman aktif");
+
+        for (uint i = 0; i < userTimeDeposits[_member].length; i++) {
+            require(!userTimeDeposits[_member][i].active, "Cairkan Simpanan Berjangka dulu");
+        }
+
+        uint256 totalRefund = dataAnggota[_member].simpananPokok + dataAnggota[_member].simpananWajib + dataAnggota[_member].simpananSukarela;
+        require(settings.currentLiquidityPool >= totalRefund, "Likuiditas koperasi tidak cukup");
+        
+        saldoIDR.burn(_member, totalRefund);
+        totalSimpananSeluruhAnggota -= totalRefund;
+        settings.currentLiquidityPool -= totalRefund;
+        
+        dataAnggota[_member].simpananPokok = 0;
+        dataAnggota[_member].simpananWajib = 0;
+        dataAnggota[_member].simpananSukarela = 0;
+        dataAnggota[_member].status = MemberStatus.Quit;
+
+        emit MembershipClosed(_member, totalRefund);
+    }
+
+    function _getTotalSimpanan(address _user) internal view returns (uint256) {
+        return saldoIDR.balanceOf(_user);
+    }
+
+    function getAllSimpananBerjangka(address _user) external view returns (SimpananBerjangka[] memory) {
+        return userTimeDeposits[_user];
+    }
+
+    function getSimpananBerjangkaLength(address _user) external view returns (uint256) {
+        return userTimeDeposits[_user].length;
+    }
+
+    function getAllMembers() external view returns (address[] memory addresses, Anggota[] memory members) {
+        uint256 count = listAlamatAnggota.length;
+        address[] memory addrs = new address[](count);
+        Anggota[] memory datas = new Anggota[](count);
+
+        for (uint256 i = 0; i < count; i++) {
+            address addr = listAlamatAnggota[i];
+            addrs[i] = addr;
+            datas[i] = dataAnggota[addr];
+        }
+        return (addrs, datas);
+    }
+
+    function getLoansBatch(uint256 _start, uint256 _count) external view returns (Pinjaman[] memory) {
+        uint256 total = idPinjamanTerakhir;
+        if (_start > total) return new Pinjaman[](0);
+        
+        uint256 end = _start + _count - 1;
+        if (end > total) end = total;
+        
+        uint256 size = end - _start + 1;
+        Pinjaman[] memory items = new Pinjaman[](size);
+        
+        for (uint256 i = 0; i < size; i++) {
+            items[i] = dataPinjaman[_start + i];
+        }
+        return items;
+    }
+}

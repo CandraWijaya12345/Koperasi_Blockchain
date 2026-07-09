@@ -136,6 +136,7 @@ export const SimpananWajibForm = ({ anggotaData, adminConfig, isLoading, isPayme
                   setLoading(true); setMsg("Memproses potong saldo..."); setIsError(false);
                   try {
                     await onPayInternal((m) => setMsg(m));
+                    setMsg(""); // Clear background message on success
                   } catch (e) {
                     setIsError(true); setMsg(e.message);
                     setTimeout(() => setMsg(''), 5000);

@@ -107,7 +107,6 @@ const LoanManagement = ({ allLoans, onApprove, onReject, onApproveSurvey, onAppr
 
     return (
         <div>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '1.5rem' }}>Manajemen Pinjaman</h2>
 
             {/* Notification Area */}
             <div style={{ marginBottom: '20px' }}>

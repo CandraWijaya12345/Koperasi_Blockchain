@@ -47,6 +47,12 @@ contract KoperasiSimpanPinjam is ReentrancyGuard, Ownable {
         uint256 shuSudahDiambil;
         uint256 branchID;
         uint256 limitPinjaman;
+        string noHP;
+        string noKTP;
+        string alamat;
+        string gender;
+        string job;
+        string emergency;
     }
 
     struct Pinjaman {
@@ -90,6 +96,12 @@ contract KoperasiSimpanPinjam is ReentrancyGuard, Ownable {
         string nama;
         string profileHash; 
         uint256 branchId;
+        string noHP;
+        string noKTP;
+        string alamat;
+        string gender;
+        string job;
+        string emergency;
     }
 
     struct SettingsParams {
@@ -127,8 +139,8 @@ contract KoperasiSimpanPinjam is ReentrancyGuard, Ownable {
     uint256 public totalSHUDibagikan;
 
     bool public useIPFSStorage = false;
-
     event StorageModeUpdated(address indexed admin, bool useIPFS, uint256 timestamp);
+
     event AnggotaBaru(address indexed user, string nama, uint256 timestamp);
     event AnggotaRejoin(address indexed user, uint256 timestamp); 
     event DepositTercatat(address indexed user, uint256 jumlah, string jenis, uint256 timestamp);
@@ -236,10 +248,22 @@ contract KoperasiSimpanPinjam is ReentrancyGuard, Ownable {
             require(bytes(p.profileHash).length > 0, "IPFS Hash wajib diisi pada mode IPFS");
             m.nama = "";
             m.profileHash = p.profileHash;
+            m.noHP = "";
+            m.noKTP = "";
+            m.alamat = "";
+            m.gender = "";
+            m.job = "";
+            m.emergency = "";
         } else {
             require(bytes(p.nama).length > 0, "Nama wajib diisi pada mode On-Chain");
             m.nama = p.nama;
             m.profileHash = p.profileHash;
+            m.noHP = p.noHP;
+            m.noKTP = p.noKTP;
+            m.alamat = p.alamat;
+            m.gender = p.gender;
+            m.job = p.job;
+            m.emergency = p.emergency;
         }
         
         m.branchID = settings.multiBranchEnabled ? p.branchId : 0;
@@ -340,18 +364,13 @@ contract KoperasiSimpanPinjam is ReentrancyGuard, Ownable {
     }
 
     function generateMonthlyBills(uint256 _nominal) external hanyaPengurus {
-        uint256 activeHumanMembers = 0;
         for (uint i = 0; i < listAlamatAnggota.length; i++) {
             address member = listAlamatAnggota[i];
-            if (member == address(this)) {
-                continue; // Exclude Koperasi Reserve from tagihan wajib
-            }
             if (dataAnggota[member].status == MemberStatus.Active) {
                 tagihanWajib[member] += _nominal;
-                activeHumanMembers++;
             }
         }
-        emit TagihanDibuat(_nominal * activeHumanMembers, block.timestamp);
+        emit TagihanDibuat(_nominal * jumlahAnggota, block.timestamp);
     }
 
     function bayarTagihanWajib(uint256 _amount) external hanyaAnggota openPeriod nonReentrant {
@@ -562,11 +581,18 @@ contract KoperasiSimpanPinjam is ReentrancyGuard, Ownable {
 
     function tolakPinjaman(uint256 _loanId, string memory _alasan) external hanyaPengurus {
         Pinjaman storage p = dataPinjaman[_loanId];
-        require(p.status == StatusPinjaman.Pending, "Status invalid");
+        // Menerima penolakan di fase Pending, Surveyed, maupun CommitteeApproved
+        require(
+            p.status == StatusPinjaman.Pending || 
+            p.status == StatusPinjaman.Surveyed || 
+            p.status == StatusPinjaman.CommitteeApproved, 
+            "Status invalid"
+        );
         p.status = StatusPinjaman.Ditolak;
         idPinjamanAktifAnggota[p.peminjam] = 0; 
         emit PinjamanDitolak(_loanId, p.peminjam, _alasan);
     }
+
 
     function updateCollectibilityStatus(uint256 _loanId, Kolektibilitas _status) external hanyaPengurus {
         dataPinjaman[_loanId].quality = _status;

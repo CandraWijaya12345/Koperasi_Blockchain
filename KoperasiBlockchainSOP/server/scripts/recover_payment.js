@@ -46,13 +46,14 @@ async function main() {
             const mappedParamsArr = [
                 pendingParams.user,
                 pendingParams.nama || "Tanpa Nama",
+                pendingParams.profileHash || "SYSTEM",
+                BigInt(pendingParams.branchId || pendingParams.branchID || 1),
                 pendingParams.noHP || "-",
                 pendingParams.noKTP || "-",
                 pendingParams.alamat || "-",
                 pendingParams.gender || pendingParams.jenisKelamin || "-",
                 pendingParams.job || pendingParams.pekerjaan || "-",
-                pendingParams.emergency || pendingParams.kontakDarurat || "-",
-                BigInt(pendingParams.branchId || pendingParams.branchID || 1)
+                pendingParams.emergency || pendingParams.kontakDarurat || "-"
             ];
             const tx1 = await contract.registerMember(mappedParamsArr, { 
                 maxPriorityFeePerGas: ethers.parseUnits('35', 'gwei'),

@@ -58,7 +58,7 @@ const BayarAngsuranForm = ({ onBayar, isLoading, isPaymentLocked, paymentSuccess
         className="btn-animate"
         style={styles.button}
         onClick={handleSubmit}
-        disabled={isLoading || !jumlah}
+        disabled={isLoading || loading || !jumlah}
       >
         {loading ? 'Memproses...' : 'Bayar Angsuran'}
       </button>

@@ -27,15 +27,23 @@ const AdminHistory = ({ logs, onRefresh, isLoading }) => {
     'BagiHasilDirilis',
     'MembershipClosed',
     'PengurusDitambahkan',
-    'ConfigUpdated'
+    'ConfigUpdated',
+    'AnggotaBaru',
+    'AnggotaRejoin'
   ];
 
   // Filter logs by sub-tab category
   const filteredByTab = logs.filter(log => {
     const eventName = log.eventName || log.fragment?.name || '';
+    const userAddr = String(log.args?.user || log.args?.anggota || log.args?.[0] || '').toLowerCase();
+    const contractAddr = String(log.address || '').toLowerCase();
+    const isSystemSync = userAddr && contractAddr && userAddr === contractAddr;
+
     if (subTab === 'member') {
+      if (isSystemSync) return false;
       return memberEvents.includes(eventName);
     } else {
+      if (isSystemSync && (eventName === 'DepositTercatat' || eventName === 'PenarikanTercatat')) return true;
       return adminEvents.includes(eventName);
     }
   });

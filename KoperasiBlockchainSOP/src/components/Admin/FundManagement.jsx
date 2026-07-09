@@ -1,15 +1,12 @@
 import React, { useState } from 'react';
-import { formatCurrency } from '../../utils/format';
+import { formatCurrency, formatrupiah } from '../../utils/format';
 import InlineMessage from '../InlineMessage';
 import { RUPIAH_ADDRESS } from '../../utils/constants';
 
-const FundManagement = ({ stats, onWithdraw, onAddLiquidity, onMint, onSync, isLoading }) => {
+const FundManagement = ({ stats, onWithdraw, onMint, onSync, isLoading }) => {
     const [amount, setAmount] = useState('');
-    const [depositAmount, setDepositAmount] = useState(''); // New state for deposit
     const [msg, setMsg] = useState('');
-    const [depositMsg, setDepositMsg] = useState(''); // New msg for deposit
     const [isError, setIsError] = useState(false);
-    const [isDepositError, setIsDepositError] = useState(false);
 
     // New state for Minting
     const [mintToAddr, setMintToAddr] = useState('');
@@ -55,21 +52,6 @@ const FundManagement = ({ stats, onWithdraw, onAddLiquidity, onMint, onSync, isL
         }
     };
 
-    const handleAddLiquidity = async (e) => {
-        e.preventDefault();
-        if (!depositAmount) return;
-        setDepositMsg('Memproses setoran...');
-        setIsDepositError(false);
-        try {
-            await onAddLiquidity(depositAmount, (m) => setDepositMsg(m));
-            setDepositMsg('Likuiditas berhasil ditambah!');
-            setDepositAmount('');
-        } catch (err) {
-            setDepositMsg('Gagal: ' + err.message);
-            setIsDepositError(true);
-        }
-    };
-
     const handleSync = async () => {
         setIsSyncing(true);
         setSyncMsg('Menyelaraskan saldo...');
@@ -85,11 +67,9 @@ const FundManagement = ({ stats, onWithdraw, onAddLiquidity, onMint, onSync, isL
 
     return (
         <div>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '1.5rem' }}>Manajemen Dana & Penarikan</h2>
-
             <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', marginBottom: '20px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
                 <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '12px' }}>Status Dana & Likuiditas</h3>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '16px', background: '#eff6ff', borderRadius: '12px' }}>
                             <div style={{ marginRight: 'auto' }}>
                                 <p style={{ fontSize: '0.9rem', color: '#64748b' }}>Saldo Xendit (IDR)</p>
@@ -116,6 +96,16 @@ const FundManagement = ({ stats, onWithdraw, onAddLiquidity, onMint, onSync, isL
                             </button>
                         </div>
 
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '16px', background: '#f0fdf4', borderRadius: '12px', border: '1px solid #bbf7d0' }}>
+                            <div style={{ marginRight: 'auto' }}>
+                                <p style={{ fontSize: '0.9rem', color: '#166534' }}>Saldo Smart Contract (IDR)</p>
+                                <p style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#15803d' }}>
+                                    {stats.contractBalance ? formatCurrency(stats.contractBalance) : 'Rp0'}
+                                </p>
+                                <p style={{ fontSize: '0.75rem', color: '#166534' }}>Jumlah Rupiah digital di dalam pool Blockchain</p>
+                            </div>
+                        </div>
+
                         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '16px', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
                             <div style={{ marginRight: 'auto' }}>
                                 <p style={{ fontSize: '0.9rem', color: '#64748b' }}>Saldo Gas Admin (POL)</p>
@@ -130,41 +120,6 @@ const FundManagement = ({ stats, onWithdraw, onAddLiquidity, onMint, onSync, isL
                     </div>
                     {syncMsg && <InlineMessage message={syncMsg} isError={syncMsg.includes('Gagal')} />}
                 </div>
-
-
-
-
-            <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', marginBottom: '20px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '16px', color: '#16a34a' }}>Tambah Likuiditas (Setor Dana)</h3>
-                <p style={{ marginBottom: '20px', color: '#4b5563', fontSize: '0.9rem' }}>
-                    Setor Dana dari wallet admin ke kontrak koperasi untuk modal pinjaman.
-                </p>
-
-                <form onSubmit={handleAddLiquidity}>
-                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>Jumlah Setoran (Rupiah)</label>
-                    <div style={{ display: 'flex', gap: '12px' }}>
-                        <input
-                            type="number"
-                            value={depositAmount}
-                            onChange={e => setDepositAmount(e.target.value)}
-                            placeholder="Contoh: 500000"
-                            style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1' }}
-                        />
-                        <button
-                            type="submit"
-                            disabled={isLoading}
-                            style={{
-                                background: '#16a34a', color: 'white', fontWeight: '600', padding: '10px 20px', borderRadius: '8px', border: 'none', cursor: 'pointer'
-                            }}
-                        >
-                            Setor Dana
-                        </button>
-                    </div>
-                    <div style={{ marginTop: '12px' }}>
-                        <InlineMessage message={depositMsg} isError={isDepositError} />
-                    </div>
-                </form>
-            </div>
 
             {/* EMERGENCY WITHDRAWAL - DISABLED AS NOT SUPPORTED BY CONTRACT */}
             {/* 

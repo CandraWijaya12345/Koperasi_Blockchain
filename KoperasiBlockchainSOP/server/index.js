@@ -5,15 +5,46 @@ const cors = require('cors');
 const { ethers } = require('ethers');
 const fs = require('fs');
 const multer = require('multer');
+const rateLimit = require('express-rate-limit');
 const { uploadJSONToIPFS, uploadFileToIPFS, uploadDirectoryToIPFS } = require('./utils/ipfs');
 const cryptoUtil = require('./utils/crypto');
 const { Xendit } = require('xendit-node');
+const { verifyLoginSignature, requireAuth, requireAdmin, requireOwnership, verifyXenditWebhook } = require('./middleware/auth');
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() }); // Store files in memory temporarily
-app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// [SECURITY] Restricted CORS — only allow known origins
+app.use(cors({
+    origin: [
+        'http://localhost:5173',
+        'http://localhost:3000',
+        // Tambahkan domain production di sini nanti:
+        // 'https://koperasi.example.com'
+    ],
+    credentials: true
+}));
+
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
+// [SECURITY] Rate Limiting
+const isProd = process.env.NODE_ENV === 'production';
+const generalLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 menit
+    max: isProd ? 200 : 15000, // Relaxed in development to prevent hot-reload/parallel decryption lockout
+    message: { error: 'Terlalu banyak request. Coba lagi dalam 15 menit.' },
+    standardHeaders: true,
+    legacyHeaders: false
+});
+const strictLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: isProd ? 10 : 1000, // Relaxed in development
+    message: { error: 'Rate limit tercapai untuk operasi sensitif.' },
+    standardHeaders: true,
+    legacyHeaders: false
+});
+app.use('/api/', generalLimiter);
 
 // --- CONFIGURATION ---
 const PORT = process.env.PORT || 5000;
@@ -57,7 +88,8 @@ if (!PRIVATE_KEY || !CONTRACT_ADDRESS) {
 
 // Load ABI
 const ABI_PATH = path.join(__dirname, '../src/abi/koperasisimpanpinjambaru.json');
-const CONTRACT_ABI = JSON.parse(fs.readFileSync(ABI_PATH, 'utf8'));
+const contractABIJson = JSON.parse(fs.readFileSync(ABI_PATH, 'utf8'));
+const CONTRACT_ABI = contractABIJson.abi || contractABIJson;
 
 // Data Storage
 const LOANS_DB_PATH = path.join(__dirname, 'data/loans.json');
@@ -321,6 +353,22 @@ async function checkXenditHealth() {
 
 // --- ROUTES ---
 
+// [SECURITY] Auth: Login with Wallet Signature → Receive JWT Session Token
+app.post('/api/auth/login', (req, res) => {
+    const { address, message, signature } = req.body;
+    if (!address || !message || !signature) {
+        return res.status(400).json({ error: 'Missing login credentials' });
+    }
+
+    const result = verifyLoginSignature(address, message, signature);
+    if (!result.valid) {
+        return res.status(401).json({ error: result.error });
+    }
+
+    console.log(`[Auth] Login successful for: ${address.substring(0, 10)}...`);
+    res.json({ success: true, token: result.token });
+});
+
 // 0. Health Monitor Endpoint
 app.get('/api/health', async (req, res) => {
     try {
@@ -345,7 +393,7 @@ app.get('/api/health', async (req, res) => {
 });
 
 // 1. Payment: Create Invoice (Simpanan)
-app.post('/api/payment/create', async (req, res) => {
+app.post('/api/payment/create', requireAuth, requireOwnership, async (req, res) => {
     const { userAddress, amount, isWajib } = req.body;
     if (!userAddress || !amount) return res.status(400).json({ error: "Data tidak lengkap" });
 
@@ -385,13 +433,13 @@ app.post('/api/payment/create', async (req, res) => {
             externalId: externalId
         });
     } catch (e) {
-        console.error("Xendit Invoice Error:", e);
+            console.error("Xendit Invoice Error:", e);
         res.status(500).json({ error: e.message });
     }
 });
 
-// 1b. Payment: Create Invoice (Loan Repayment / Angsuran)
-app.post('/api/payment/repay', async (req, res) => {
+// 1b. Payment: Create Repayment Invoice
+app.post('/api/payment/repay', requireAuth, requireOwnership, async (req, res) => {
     const { userAddress, loanId, amount } = req.body;
     if (!userAddress || !loanId || !amount) {
         return res.status(400).json({ error: "Data tidak lengkap (userAddress, loanId, amount)" });
@@ -436,7 +484,7 @@ app.post('/api/payment/repay', async (req, res) => {
 });
 
 // 2. Webhook: Xendit Callback (Invoice Paid)
-app.post('/api/xendit-callback', (req, res) => {
+app.post('/api/xendit-callback', verifyXenditWebhook, (req, res) => {
     const data = req.body;
     console.log("Xendit Webhook Received:", data.status, data.external_id);
     
@@ -449,10 +497,10 @@ app.post('/api/xendit-callback', (req, res) => {
 });
 
 // 2c. Manual Verification Endpoint (Backup if Webhook fails)
-app.get('/api/payment/verify/:externalId', async (req, res) => {
+app.get('/api/payment/verify/:externalId', requireAuth, async (req, res) => {
     const { externalId } = req.params;
     try {
-        console.log(`Manual verification requested for: ${externalId}`);
+        console.log(`Manual verification requested by ${req.verifiedAddress} for: ${externalId}`);
         let response = null;
 
         if (externalId.startsWith('TRX-') || externalId.startsWith('REPAY-')) {
@@ -467,6 +515,28 @@ app.get('/api/payment/verify/:externalId', async (req, res) => {
         if (!response) {
             console.log(`Invoice not found for ID: ${externalId}`);
             return res.json({ success: false, status: 'NOT_FOUND' });
+        }
+
+        // [SECURITY] Ownership or Admin Check
+        const description = response.description || "";
+        const parts = description.split(' - ');
+        let payerAddress = null;
+        if (parts.length > 1) {
+            payerAddress = parts[1].trim().toLowerCase();
+        }
+
+        let isAllowed = payerAddress === req.verifiedAddress;
+        if (!isAllowed) {
+            try {
+                const isAdmin = await contract.isPengurus(req.verifiedAddress);
+                if (isAdmin) isAllowed = true;
+            } catch (e) {
+                console.error("Error checking admin status in verification route:", e.message);
+            }
+        }
+
+        if (!isAllowed) {
+            return res.status(403).json({ error: "Akses ditolak: Anda tidak memiliki wewenang untuk memverifikasi pembayaran ini" });
         }
 
         console.log(`Invoice status for ${externalId}: ${response.status}`);
@@ -602,43 +672,61 @@ async function processPaymentLogics(data) {
                                         });
                                         
                                         console.log(`[Webhook IPFS] Uploading encrypted directory for ${pendingParams.nama} to IPFS...`);
-                                        jsonHash = await uploadDirectoryToIPFS(filesList);
+                                        jsonHash = await uploadDirectoryToIPFS(filesList, process.env.PINATA_GROUP_IPFS || '4fe1196c-9c23-454e-8773-07688861ed38');
                                         console.log(`[Webhook IPFS] Root Folder CID: ${jsonHash}`);
                                     } else {
-                                        console.log(`[Webhook] ON-CHAIN Storage Mode is ACTIVE. Uploading ENCRYPTED KTP photo to IPFS...`);
+                                        console.log(`[Webhook] ON-CHAIN Storage Mode is ACTIVE. Uploading ENCRYPTED KTP photo ONLY to IPFS...`);
+                                        
+                                        const userAddressLower = userAddress.toLowerCase();
+                                        let encryptedBuffer = null;
                                         
                                         if (pendingParams.photoBase64) {
                                             try {
                                                 const matches = pendingParams.photoBase64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
                                                 if (matches && matches.length === 3) {
                                                     const fileBuffer = Buffer.from(matches[2], 'base64');
-                                                    const userAddressLower = userAddress.toLowerCase();
                                                     // [ENCRYPT] Encrypt KTP image buffer
-                                                    const encryptedBuffer = cryptoUtil.encryptBuffer(fileBuffer);
-                                                    
-                                                    const filesList = [{
-                                                        buffer: encryptedBuffer,
-                                                        filepath: `koperasi_ktp/ktp_${userAddressLower}`
-                                                    }];
-                                                    
-                                                    console.log(`[Webhook On-Chain] Uploading encrypted KTP Photo to IPFS...`);
-                                                    jsonHash = await uploadDirectoryToIPFS(filesList);
-                                                    console.log(`[Webhook On-Chain] Root Folder CID for encrypted photo: ${jsonHash}`);
+                                                    encryptedBuffer = cryptoUtil.encryptBuffer(fileBuffer);
                                                 }
                                             } catch (err) {
-                                                console.error("[Webhook On-Chain] KTP Photo upload failed:", err.message);
+                                                console.error("[Webhook On-Chain] KTP Photo prep failed:", err.message);
                                             }
+                                        }
+                                        
+                                        if (encryptedBuffer) {
+                                            console.log(`[Webhook On-Chain] Uploading only encrypted KTP photo to IPFS...`);
+                                            jsonHash = await uploadFileToIPFS(
+                                                encryptedBuffer,
+                                                `ktp_${userAddressLower}.jpg`,
+                                                process.env.PINATA_GROUP_ONCHAIN || 'a3b72ec4-8d69-4c0e-a592-85419fbff2aa'
+                                            );
+                                            console.log(`[Webhook On-Chain] Photo File CID: ${jsonHash}`);
+                                        } else {
+                                            console.warn(`[Webhook On-Chain] Warning: No photo base64 provided. Using empty string for CID.`);
+                                            jsonHash = "";
                                         }
                                     }
                                     
-                                    // [ENCRYPT] Encrypt member name stored directly on the blockchain
+                                    // [ENCRYPT] Encrypt member details stored directly on the blockchain
                                     const encryptedNameOnChain = cryptoUtil.encryptText(pendingParams.nama || "Tanpa Nama");
+                                    const encryptedNoHPOnChain = cryptoUtil.encryptText(pendingParams.noHP || "");
+                                    const encryptedNoKTPOnChain = cryptoUtil.encryptText(pendingParams.noKTP || "");
+                                    const encryptedAlamatOnChain = cryptoUtil.encryptText(pendingParams.alamat || "");
+                                    const encryptedGenderOnChain = cryptoUtil.encryptText(pendingParams.gender || "");
+                                    const encryptedJobOnChain = cryptoUtil.encryptText(pendingParams.job || "");
+                                    const encryptedEmergencyOnChain = cryptoUtil.encryptText(pendingParams.emergency || "");
                                     
                                     const mappedParamsArr = [
                                         pendingParams.user,
                                         encryptedNameOnChain,
                                         jsonHash,
-                                        BigInt(pendingParams.branchId || pendingParams.branchID || 1)
+                                        BigInt(pendingParams.branchId || pendingParams.branchID || 1),
+                                        encryptedNoHPOnChain,
+                                        encryptedNoKTPOnChain,
+                                        encryptedAlamatOnChain,
+                                        encryptedGenderOnChain,
+                                        encryptedJobOnChain,
+                                        encryptedEmergencyOnChain
                                     ];
                                     
                                     const regTx = await contract.registerMember(mappedParamsArr, GAS_OVERRIDE);
@@ -720,7 +808,7 @@ async function processPaymentLogics(data) {
 
 // 2b. Webhook: Xendit Disbursement Callback (Payout Status)
 // NOTE: Set this URL in Xendit Dashboard > Settings > Callbacks > Money Out
-app.post('/api/xendit-disbursement-callback', async (req, res) => {
+app.post('/api/xendit-disbursement-callback', verifyXenditWebhook, async (req, res) => {
     const callbackrupiah = req.headers['x-callback-rupiah'];
     // In production, verify callbackrupiah
 
@@ -740,8 +828,8 @@ app.post('/api/xendit-disbursement-callback', async (req, res) => {
     res.status(200).json({ status: 'OK' });
 });
 
-// Helper for Manual Deposit (if needed for testing)
-app.post('/api/webhook/deposit', async (req, res) => {
+// Helper for Manual Deposit (ADMIN ONLY — protected)
+app.post('/api/webhook/deposit', requireAuth, requireAdmin(contract), async (req, res) => {
     // Same as before
     const { userAddress, amount, isWajib } = req.body;
     if (!userAddress || !amount) return res.status(400).json({ error: "Data missing" });
@@ -755,8 +843,8 @@ app.post('/api/webhook/deposit', async (req, res) => {
     }
 });
 
-// Helper for Repayment (Manual/Webhook)
-app.post('/api/webhook/repay', async (req, res) => {
+// Helper for Repayment (ADMIN ONLY — protected)
+app.post('/api/webhook/repay', requireAuth, requireAdmin(contract), async (req, res) => {
     const { loanId, amount } = req.body;
     if (!loanId || !amount) return res.status(400).json({ error: "Data missing" });
     try {
@@ -770,7 +858,7 @@ app.post('/api/webhook/repay', async (req, res) => {
 });
 
 // NEW: Approve Loan & Disburse Logic
-app.post('/api/loan/approve-disburse', async (req, res) => {
+app.post('/api/loan/approve-disburse', requireAuth, requireAdmin(contract), async (req, res) => {
     const { loanId, userAddress } = req.body;
     if (!loanId || !userAddress) return res.status(400).json({ error: "Missing loanId or userAddress" });
 
@@ -865,7 +953,7 @@ app.post('/api/loan/approve-disburse', async (req, res) => {
 });
 
 // Admin: Close Membership
-app.post('/api/admin/close-membership', async (req, res) => {
+app.post('/api/admin/close-membership', requireAuth, requireAdmin(contract), async (req, res) => {
     const { memberAddress } = req.body;
     try {
         console.log(`[Admin] Closing Membership for: ${memberAddress}`);
@@ -883,7 +971,7 @@ app.post('/api/admin/close-membership', async (req, res) => {
 });
 
 // 3. User Registration
-app.post('/api/register', async (req, res) => {
+app.post('/api/register', requireAuth, requireOwnership, async (req, res) => {
     const { params } = req.body;
     try {
         console.log(`\n[Registration] --- QUEUING PROCESS for: ${params ? params.user : 'unknown'} ---`);
@@ -891,13 +979,17 @@ app.post('/api/register', async (req, res) => {
         if (!params) throw new Error("Payload pendaftaran tidak ditemukan");
         if (!params.user) throw new Error("Alamat user (address) tidak ditemukan dalam payload");
         if (!params.nama || params.nama.trim().length < 3) throw new Error("Nama lengkap minimal 3 karakter");
+        if (/[<>"'&]/.test(params.nama)) throw new Error("Nama mengandung karakter tidak valid");
         if (!params.noHP || !/^08[0-9]{8,11}$/.test(params.noHP)) throw new Error("Nomor WhatsApp tidak valid (harus diawali 08...)");
         if (!params.noKTP || params.noKTP.length !== 16) throw new Error("NIK harus tepat 16 digit");
         if (!params.photoBase64) throw new Error("Foto KTP wajib diunggah");
         if (!params.alamat || params.alamat.trim().length < 10) throw new Error("Alamat minimal 10 karakter");
+        if (/[<>"'&]/.test(params.alamat)) throw new Error("Alamat mengandung karakter tidak valid");
         if (!params.gender) throw new Error("Jenis kelamin wajib diisi");
         if (!params.job || params.job.trim() === "") throw new Error("Pekerjaan wajib diisi");
+        if (/[<>"'&]/.test(params.job)) throw new Error("Pekerjaan mengandung karakter tidak valid");
         if (!params.emergency || params.emergency.trim() === "") throw new Error("Kontak darurat wajib diisi");
+        if (/[<>"'&]/.test(params.emergency)) throw new Error("Kontak darurat mengandung karakter tidak valid");
 
         // [BARU] Jangan panggil blockchain di sini!
         // Simpan saja di antrean pending. Pendaftaran blockchain dilakukan setelah bayar Simpanan Pokok via Webhook.
@@ -917,7 +1009,7 @@ app.post('/api/register', async (req, res) => {
 });
 
 // 3a. IPFS: Upload Registration Data & Photo
-app.post('/api/ipfs/upload', upload.single('ktpPhoto'), async (req, res) => {
+app.post('/api/ipfs/upload', requireAuth, upload.single('ktpPhoto'), async (req, res) => {
     try {
         const { userData } = req.body; // Ini adalah string JSON
         const parsedData = JSON.parse(userData);
@@ -925,11 +1017,17 @@ app.post('/api/ipfs/upload', upload.single('ktpPhoto'), async (req, res) => {
 
         console.log(`[IPFS] Processing upload for: ${parsedData.nama}`);
 
+        // Fetch current storage mode to route files to the correct Pinata group
+        const useIPFS = await contract.useIPFSStorage();
+        const groupId = useIPFS
+            ? (process.env.PINATA_GROUP_IPFS || '4fe1196c-9c23-454e-8773-07688861ed38')
+            : (process.env.PINATA_GROUP_ONCHAIN || 'a3b72ec4-8d69-4c0e-a592-85419fbff2aa');
+
         // 1. Upload Photo if exists
         if (req.file) {
             const safeName = parsedData.nama.replace(/\s+/g, '_');
             console.log(`[IPFS] Uploading KTP Photo for ${parsedData.nama}...`);
-            photoHash = await uploadFileToIPFS(req.file.buffer, `KTP_${safeName}_${Date.now()}.webp`);
+            photoHash = await uploadFileToIPFS(req.file.buffer, `KTP_${safeName}_${Date.now()}.webp`, groupId);
             console.log(`[IPFS] Photo Hash: ${photoHash}`);
         }
 
@@ -942,7 +1040,7 @@ app.post('/api/ipfs/upload', upload.single('ktpPhoto'), async (req, res) => {
 
         // 3. Upload JSON to IPFS
         console.log(`[IPFS] Uploading JSON Metadata for ${parsedData.nama}...`);
-        const jsonHash = await uploadJSONToIPFS(ipfsPayload, `Identity_${parsedData.nama}_${Date.now()}.json`);
+        const jsonHash = await uploadJSONToIPFS(ipfsPayload, `Identity_${parsedData.nama}_${Date.now()}.json`, groupId);
         console.log(`[IPFS] Metadata Hash: ${jsonHash}`);
 
         res.json({
@@ -958,7 +1056,7 @@ app.post('/api/ipfs/upload', upload.single('ktpPhoto'), async (req, res) => {
 
 // 3.1 Update Global Settings (Admin)
 // Supports partial update by merging current settings
-app.post('/api/gov/update-settings', async (req, res) => {
+app.post('/api/gov/update-settings', requireAuth, requireAdmin(contract), async (req, res) => {
     try {
         // --- DIAGNOSTIC LOGGING ---
         console.log("--------------------------------------------------");
@@ -1085,7 +1183,7 @@ app.post('/api/gov/update-settings', async (req, res) => {
 });
 
 // Admin: Approve Survey
-app.post('/api/loan/survey', async (req, res) => {
+app.post('/api/loan/survey', requireAuth, requireAdmin(contract), async (req, res) => {
     const { loanId, note } = req.body;
     try {
         const tx = await contract.approveSurvey(loanId, note || "", GAS_OVERRIDE);
@@ -1097,7 +1195,7 @@ app.post('/api/loan/survey', async (req, res) => {
 });
 
 // Admin: Approve Committee
-app.post('/api/loan/committee', async (req, res) => {
+app.post('/api/loan/committee', requireAuth, requireAdmin(contract), async (req, res) => {
     const { loanId } = req.body;
     try {
         const tx = await contract.approveCommittee(loanId, GAS_OVERRIDE);
@@ -1109,7 +1207,7 @@ app.post('/api/loan/committee', async (req, res) => {
 });
 
 // Admin: Reject Loan
-app.post('/api/loan/reject', async (req, res) => {
+app.post('/api/loan/reject', requireAuth, requireAdmin(contract), async (req, res) => {
     const { loanId, reason } = req.body;
     try {
         const tx = await contract.tolakPinjaman(loanId, reason || "Ditolak oleh Admin", GAS_OVERRIDE);
@@ -1121,7 +1219,7 @@ app.post('/api/loan/reject', async (req, res) => {
 });
 
 // Admin: Generate Monthly Bills
-app.post('/api/gov/generate-bills', async (req, res) => {
+app.post('/api/gov/generate-bills', requireAuth, requireAdmin(contract), async (req, res) => {
     const { amount } = req.body;
     try {
         const amountWei = ethers.parseUnits(amount.toString(), 18);
@@ -1134,7 +1232,7 @@ app.post('/api/gov/generate-bills', async (req, res) => {
 });
 
 // Admin: Release Profit Sharing (SHU)
-app.post('/api/gov/release-sharing', async (req, res) => {
+app.post('/api/gov/release-sharing', requireAuth, requireAdmin(contract), async (req, res) => {
     const { percentage } = req.body;
     try {
         const tx = await contract.rilisBagiHasil(percentage, GAS_OVERRIDE);
@@ -1146,7 +1244,7 @@ app.post('/api/gov/release-sharing', async (req, res) => {
 });
 
 // NEW: Store Loan Request Details (Bank Info)
-app.post('/api/loan/save-details', async (req, res) => {
+app.post('/api/loan/save-details', requireAuth, requireOwnership, async (req, res) => {
     const { userAddress, bank, accountNumber, loanAmount } = req.body;
     if (!userAddress || !bank || !accountNumber) {
         return res.status(400).json({ error: "Missing bank details" });
@@ -1171,34 +1269,60 @@ app.post('/api/loan/save-details', async (req, res) => {
 });
 
 // NEW: Get Loan Details
-app.get('/api/loan/details/:userAddress', (req, res) => {
+app.get('/api/loan/details/:userAddress', requireAuth, async (req, res) => {
     const { userAddress } = req.params;
+    
+    // Validate Ethereum address format
+    if (!/^0x[a-fA-F0-9]{40}$/.test(userAddress)) {
+        return res.status(403).json({ error: "Akses ditolak: Format alamat tidak valid" });
+    }
+    
+    const verified = req.verifiedAddress;
+    
+    // Check if owner or admin
+    let isAllowed = verified === userAddress.toLowerCase();
+    if (!isAllowed) {
+        try {
+            const isAdmin = await contract.isPengurus(verified);
+            if (isAdmin) isAllowed = true;
+        } catch (e) {
+            console.error("Error checking admin status in details route:", e.message);
+        }
+    }
+
+    if (!isAllowed) {
+        return res.status(403).json({ error: "Akses ditolak: Anda tidak memiliki wewenang untuk melihat data ini" });
+    }
+
     const db = getLoansDB();
     const details = db[userAddress.toLowerCase()];
     res.json({ success: true, details });
 });
 
 // 4. Withdrawal (Xendit Payout)
-app.post('/api/withdraw', async (req, res) => {
+app.post('/api/withdraw', strictLimiter, requireAuth, requireOwnership, async (req, res) => {
     const { userAddress, amount, bank, accountNumber } = req.body;
     if (!userAddress || !amount || !bank || !accountNumber) {
         return res.status(400).json({ error: "Missing withdrawal data" });
     }
 
     try {
-        console.log(`Processing Withdrawal: ${amount} to ${bank} ${accountNumber}`);
+        console.log(`Processing Withdrawal: ${amount} to ${bank} ${accountNumber} (User: ${userAddress})`);
 
-        // 1. Create Payout in Xendit
+        // LANGKAH 1: Burn dulu di blockchain (jika gagal, tidak ada uang keluar)
+        const amountWei = ethers.parseUnits(amount.toString(), 18);
+        const tx = await contract.recordWithdrawal(userAddress, amountWei, GAS_OVERRIDE);
+        console.log("Blockchain burn tx sent:", tx.hash);
+        await tx.wait();
+        console.log("Blockchain burn confirmed!");
+
+        // LANGKAH 2: Baru kirim payout ke bank via Xendit
         const externalId = `PO-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-        let payoutResult;
-
         try {
             const channelCode = `ID_${bank.toUpperCase()}`;
-            console.log(`[Xendit Withdrawal] Requesting Payout: ${channelCode} to ${accountNumber} (Amount: ${amount})`);
+            console.log(`[Xendit Payout] Requesting Payout: ${channelCode} to ${accountNumber} (Amount: ${amount})`);
 
-            // Use Payout V2 or Disbursements (Payout is easier)
-            // [FIX] Use Payout V2 Schema (channelCode + channelProperties)
-            payoutResult = await Payout.createPayout({
+            const payoutResult = await Payout.createPayout({
                 idempotencyKey: `ikey-${externalId}`,
                 data: {
                     referenceId: externalId,
@@ -1215,52 +1339,65 @@ app.post('/api/withdraw', async (req, res) => {
             });
 
             console.log("Xendit Payout Created:", payoutResult.status);
-        } catch (xenditErr) {
-            console.error("Xendit Payout Failed:", xenditErr.message);
-            // Return error to user so they know payout failed
-            // In demo, we might want to continue to burn rupiah?
-            // But for Xendit migration, let's be strict.
-            return res.status(400).json({ error: "Gagal memproses Payout Xendit: " + xenditErr.message });
+            res.json({
+                success: true,
+                txHash: tx.hash,
+                payoutId: payoutResult.id,
+                status: payoutResult.status
+            });
+        } catch (payoutErr) {
+            // PAYOUT GAGAL — Refund: kembalikan saldo di blockchain via recordDeposit
+            console.error("Payout failed, refunding blockchain:", payoutErr.message);
+            try {
+                console.log(`[Refund] Refunding ${amount} back to ${userAddress} on blockchain...`);
+                const refundTx = await contract.recordDeposit(
+                    userAddress, amountWei, false, GAS_OVERRIDE
+                );
+                await refundTx.wait();
+                console.log("Refund successful! Tx:", refundTx.hash);
+            } catch (refundErr) {
+                console.error("CRITICAL: Refund also failed!", refundErr.message);
+            }
+            return res.status(400).json({ 
+                error: "Payout ke bank gagal. Saldo Anda telah dikembalikan di blockchain." 
+            });
         }
-
-        // 2. Burn rupiahs on Blockchain
-        const amountWei = ethers.parseUnits(amount.toString(), 18);
-        const tx = await contract.recordWithdrawal(userAddress, amountWei, GAS_OVERRIDE);
-        console.log("Burn Tx Sent:", tx.hash);
-        await tx.wait();
-
-        res.json({
-            success: true,
-            txHash: tx.hash,
-            payoutId: payoutResult.id,
-            status: payoutResult.status
-        });
-
     } catch (error) {
-        console.error("Blockchain Error:", error);
+        console.error("Blockchain Error during burn:", error);
         res.status(500).json({ error: error.message });
     }
 });
 
 // 5. Get Balances (Xendit + Contract)
-app.get('/api/balance', async (req, res) => {
+app.get('/api/balance', requireAuth, requireAdmin(contract), async (req, res) => {
     try {
         // Parallel fetch for speed
         const xRes = await Balance.getBalance({ accountType: 'CASH' });
-        const idrAddr = await contract.saldoIDR();
-        const idr = new ethers.Contract(idrAddr, ['function balanceOf(address) view returns (uint256)'], wallet);
+        
+        let contractBalance = '0';
+        let adminPolBalance = '0';
 
-        const [cBal, polBal] = await Promise.all([
-            idr.balanceOf(CONTRACT_ADDRESS),
-            provider.getBalance(wallet.address)
-        ]);
+        try {
+            const idrAddr = await contract.saldoIDR();
+            const idr = new ethers.Contract(idrAddr, ['function balanceOf(address) view returns (uint256)'], wallet);
+
+            const [cBal, polBal] = await Promise.all([
+                idr.balanceOf(CONTRACT_ADDRESS),
+                provider.getBalance(wallet.address)
+            ]);
+            
+            contractBalance = cBal.toString();
+            adminPolBalance = ethers.formatEther(polBal);
+        } catch (rpcError) {
+            console.warn("[RPC] Blockchain Balance fetch failed, using fallback '0':", rpcError.message);
+        }
 
         res.json({
             success: true,
             balance: xRes.balance,
             xenditBalance: xRes.balance,
-            contractBalance: cBal.toString(),
-            adminPolBalance: ethers.formatEther(polBal)
+            contractBalance,
+            adminPolBalance
         });
     } catch (error) {
         console.error("Balance Fetch Error:", error);
@@ -1304,7 +1441,13 @@ async function runAutoSync() {
                         CONTRACT_ADDRESS,
                         "KOPERASI RESERVE",
                         "SYSTEM", // ProfileHash placeholder for system account
-                        0n
+                        0n,
+                        "", // noHP
+                        "", // noKTP
+                        "", // alamat
+                        "", // gender
+                        "", // job
+                        ""  // emergency
                     ], GAS_OVERRIDE);
                     await txReg.wait();
                     console.log("[AutoSync] Reserve Account Registered Successfully.");
@@ -1319,6 +1462,20 @@ async function runAutoSync() {
             const tx = await contract.recordDeposit(CONTRACT_ADDRESS, diff, false, GAS_OVERRIDE);
             await tx.wait();
             console.log(`[AutoSync] Success! Minted ${diff.toString()} to Reserve.`);
+        } else if (diff < 0n) {
+            const burnAmount = -diff;
+            console.log(`[AutoSync] Diff detected: negative ${burnAmount.toString()}. Burning excess liquidity...`);
+            
+            // Check if registered first
+            const isMember = await contract.dataAnggota(CONTRACT_ADDRESS).then(d => d.terdaftar);
+            if (!isMember) {
+                console.log("[AutoSync] Reserve account not registered. Skipping burn to prevent revert.");
+                return;
+            }
+
+            const tx = await contract.recordWithdrawal(CONTRACT_ADDRESS, burnAmount, GAS_OVERRIDE);
+            await tx.wait();
+            console.log(`[AutoSync] Success! Burned ${burnAmount.toString()} from Reserve.`);
         } else {
             console.log("[AutoSync] Liquidity is sufficient.");
         }
@@ -1337,7 +1494,7 @@ async function runAutoSync() {
 setInterval(runAutoSync, 60000);
 
 // Manual Trigger Endpoint
-app.post('/api/sync-liquidity', async (req, res) => {
+app.post('/api/sync-liquidity', requireAuth, requireAdmin(contract), async (req, res) => {
     try {
         await runAutoSync();
         res.json({ success: true, message: "Sync process triggered" });
@@ -1347,7 +1504,7 @@ app.post('/api/sync-liquidity', async (req, res) => {
 });
 
 // Debug Endpoint
-app.get('/api/debug/liquidity', async (req, res) => {
+app.get('/api/debug/liquidity', requireAuth, requireAdmin(contract), async (req, res) => {
     try {
         const idrAddr = await contract.saldoIDR();
         const idr = new ethers.Contract(idrAddr, ['function balanceOf(address) view returns (uint256)'], wallet);
@@ -1369,7 +1526,7 @@ app.get('/api/debug/liquidity', async (req, res) => {
 // --- SECURE DECRYPTION ENDPOINTS ---
 
 // 1. Decrypt Text (Utility)
-app.post('/api/crypto/decrypt', (req, res) => {
+app.post('/api/crypto/decrypt', requireAuth, (req, res) => {
     const { text } = req.body;
     try {
         const decrypted = cryptoUtil.decryptText(text);
@@ -1379,52 +1536,116 @@ app.post('/api/crypto/decrypt', (req, res) => {
     }
 });
 
+// Helper to fetch from multiple IPFS gateways in parallel for maximum speed and reliability
+async function fetchFromIPFSGateways(hash, subPath = "", isBinary = false) {
+    const gateways = [
+        `https://gateway.pinata.cloud/ipfs/`,
+        `https://cloudflare-ipfs.com/ipfs/`,
+        `https://ipfs.io/ipfs/`
+    ];
+
+    const fetchFromGateway = async (gw) => {
+        const url = `${gw}${hash}${subPath ? '/' + subPath : ''}`;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+        
+        try {
+            const response = await fetch(url, { signal: controller.signal });
+            clearTimeout(timeoutId);
+            
+            if (response.ok) {
+                if (isBinary) {
+                    const arrayBuffer = await response.arrayBuffer();
+                    return { ok: true, buffer: Buffer.from(arrayBuffer), url };
+                } else {
+                    const text = await response.text();
+                    return { ok: true, text, url };
+                }
+            }
+            throw new Error(`HTTP status ${response.status}`);
+        } catch (e) {
+            clearTimeout(timeoutId);
+            console.warn(`[IPFS Fetch] Gateway ${gw} failed: ${e.message}`);
+            throw e;
+        }
+    };
+
+    try {
+        const promises = gateways.map(gw => fetchFromGateway(gw));
+        const result = await Promise.any(promises);
+        console.log(`[IPFS Fetch] SUCCESS from gateway: ${result.url}`);
+        return result;
+    } catch (err) {
+        console.error(`[IPFS Fetch] All gateways failed for hash: ${hash}, subPath: ${subPath}`);
+        return { ok: false, error: "All gateways failed" };
+    }
+}
+
 // 2. Fetch and Decrypt IPFS Metadata
-app.get('/api/ipfs/metadata/:hash/:address', async (req, res) => {
+app.get('/api/ipfs/metadata/:hash/:address', requireAuth, async (req, res) => {
     const { hash, address } = req.params;
     try {
-        const directUrl = `https://ipfs.io/ipfs/${hash}`;
-        const response = await fetch(directUrl);
-        if (!response.ok) {
+        const ipfsResult = await fetchFromIPFSGateways(hash);
+        if (!ipfsResult.ok) {
             return res.status(404).json({ error: "Failed to fetch from IPFS" });
         }
 
-        const text = await response.text();
+        const text = ipfsResult.text;
         let metadataText = text;
 
         if (text.includes('<!DOCTYPE html>') || text.includes('<html')) {
             const userAddressLower = address.toLowerCase();
-            let possibleUrls = [];
+            let possiblePaths = [];
             const regex = new RegExp(`([^"'/\\s]+_${userAddressLower})`, 'i');
             
             // Default folder fallback
             const match = text.match(regex);
             let folderName = match && match[1] ? match[1] : `anggota_${userAddressLower}`;
             
+            // Prioritize root-level identity.json if it exists at the root directory level
+            if (text.includes('identity.json')) {
+                possiblePaths.push(`identity.json`);
+            }
+
             // Scenario 1: Folder contains "koperasi_anggota" subfolder (IPFS Storage Mode)
             if (text.includes('koperasi_anggota')) {
-                const subfolderUrl = `https://ipfs.io/ipfs/${hash}/koperasi_anggota`;
-                const subfolderRes = await fetch(subfolderUrl).catch(() => null);
-                if (subfolderRes && subfolderRes.ok) {
-                    const subText = await subfolderRes.text();
+                const subfolderRes = await fetchFromIPFSGateways(hash, "koperasi_anggota");
+                if (subfolderRes.ok) {
+                    const subText = subfolderRes.text;
                     const subMatch = subText.match(regex);
                     if (subMatch && subMatch[1]) {
                         folderName = subMatch[1];
                     }
                 }
-                possibleUrls.push(`https://ipfs.io/ipfs/${hash}/koperasi_anggota/${folderName}/identity.json`);
+                possiblePaths.push(`koperasi_anggota/${folderName}/identity.json`);
+            }
+
+            // Scenario 1b: Folder contains "koperasi_ktp" subfolder (On-Chain Storage Mode)
+            if (text.includes('koperasi_ktp')) {
+                const subfolderRes = await fetchFromIPFSGateways(hash, "koperasi_ktp");
+                if (subfolderRes.ok) {
+                    const subText = subfolderRes.text;
+                    const subMatch = subText.match(regex);
+                    if (subMatch && subMatch[1]) {
+                        folderName = subMatch[1];
+                    }
+                }
+                possiblePaths.push(`koperasi_ktp/${folderName}/identity.json`);
             }
             
-            // Standard fallback paths
-            possibleUrls.push(`https://ipfs.io/ipfs/${hash}/${folderName}/identity.json`);
-            possibleUrls.push(`https://ipfs.io/ipfs/${hash}/identity.json`);
+            // Fallback paths
+            possiblePaths.push(`${folderName}/identity.json`);
+            possiblePaths.push(folderName); // Try direct file path if it is a file under the root directory
+            if (!text.includes('identity.json')) {
+                possiblePaths.push(`identity.json`);
+            }
 
             let fetchedSuccess = false;
-            for (const url of possibleUrls) {
-                console.log(`[Decrypt API] Trying to fetch metadata from: ${url}`);
-                const trialRes = await fetch(url).catch(() => null);
-                if (trialRes && trialRes.ok) {
-                    metadataText = await trialRes.text();
+            for (const path of possiblePaths) {
+                console.log(`[Decrypt API] Trying to fetch metadata subpath: ${path}`);
+                const trialRes = await fetchFromIPFSGateways(hash, path);
+                if (trialRes.ok) {
+                    metadataText = trialRes.text;
                     fetchedSuccess = true;
                     break;
                 }
@@ -1435,9 +1656,27 @@ app.get('/api/ipfs/metadata/:hash/:address', async (req, res) => {
             }
         }
 
-        const decryptedJsonText = cryptoUtil.decryptText(metadataText);
-        const metadata = JSON.parse(decryptedJsonText);
-        res.json({ success: true, ...metadata });
+        try {
+            const decryptedJsonText = cryptoUtil.decryptText(metadataText);
+            const metadata = JSON.parse(decryptedJsonText);
+            res.json({ success: true, ...metadata });
+        } catch (decryptErr) {
+            console.warn("[Decrypt API] Could not decrypt metadata, assuming it's a direct file (On-Chain mode photo):", decryptErr.message);
+            // In On-Chain storage mode, the hash is the direct photo file CID.
+            // We return a structured fallback with photoHash set to the hash itself.
+            res.json({
+                success: true,
+                nama: "",
+                noHP: "",
+                noKTP: "",
+                alamat: "",
+                gender: "",
+                job: "",
+                emergency: "",
+                photoHash: hash, // Directly the CID
+                timestamp: new Date().toISOString()
+            });
+        }
     } catch (e) {
         console.error("[Decrypt API] Metadata decryption error:", e.message);
         res.status(500).json({ error: e.message });
@@ -1445,72 +1684,70 @@ app.get('/api/ipfs/metadata/:hash/:address', async (req, res) => {
 });
 
 // 3. Fetch and Decrypt IPFS Photo
-app.get('/api/ipfs/photo/:hash/:address', async (req, res) => {
+app.get('/api/ipfs/photo/:hash/:address', requireAuth, async (req, res) => {
     const { hash, address } = req.params;
     try {
         const userAddressLower = address.toLowerCase();
-        let photoUrl = `https://ipfs.io/ipfs/${hash}`;
+        let targetSubPath = "";
+        
+        // Fetch root directory description to inspect structure
+        const rootRes = await fetchFromIPFSGateways(hash);
+        if (rootRes.ok) {
+            const htmlText = rootRes.text;
+            if (htmlText.includes('<!DOCTYPE html>') || htmlText.includes('<html')) {
+                let possiblePaths = [];
+                const regex = new RegExp(`([^"'/\\s]+_${userAddressLower})`, 'i');
+                
+                const match = htmlText.match(regex);
+                let folderName = match && match[1] ? match[1] : `anggota_${userAddressLower}`;
+                
+                // Scenario 1: Folder contains "koperasi_anggota" subfolder (IPFS Storage Mode)
+                if (htmlText.includes('koperasi_anggota')) {
+                    const subfolderRes = await fetchFromIPFSGateways(hash, "koperasi_anggota");
+                    if (subfolderRes.ok) {
+                        const subText = subfolderRes.text;
+                        const subMatch = subText.match(regex);
+                        if (subMatch && subMatch[1]) {
+                            folderName = subMatch[1];
+                        }
+                    }
+                    possiblePaths.push(`koperasi_anggota/${folderName}/ktp_photo`);
+                }
+                
+                // Scenario 2: Folder contains "koperasi_ktp" subfolder (On-Chain Storage Mode)
+                if (htmlText.includes('koperasi_ktp')) {
+                    possiblePaths.push(`koperasi_ktp/ktp_${userAddressLower}`);
+                }
 
-        const headRes = await fetch(photoUrl, { method: 'HEAD' }).catch(() => null);
-        const contentType = headRes ? headRes.headers.get('content-type') : '';
+                possiblePaths.push(`ktp_${userAddressLower}`);
+                possiblePaths.push(`${folderName}/ktp_photo`);
+                possiblePaths.push(`ktp_photo`);
 
-        if (contentType && contentType.includes('html')) {
-            const listRes = await fetch(photoUrl);
-            const htmlText = await listRes.text();
-            
-            let possibleUrls = [];
-            const regex = new RegExp(`([^"'/\\s]+_${userAddressLower})`, 'i');
-            
-            const match = htmlText.match(regex);
-            let folderName = match && match[1] ? match[1] : `anggota_${userAddressLower}`;
-            
-            // Scenario 1: Folder contains "koperasi_anggota" subfolder (IPFS Storage Mode)
-            if (htmlText.includes('koperasi_anggota')) {
-                const subfolderUrl = `https://ipfs.io/ipfs/${hash}/koperasi_anggota`;
-                const subfolderRes = await fetch(subfolderUrl).catch(() => null);
-                if (subfolderRes && subfolderRes.ok) {
-                    const subText = await subfolderRes.text();
-                    const subMatch = subText.match(regex);
-                    if (subMatch && subMatch[1]) {
-                        folderName = subMatch[1];
+                let fetchedSuccess = false;
+                for (const path of possiblePaths) {
+                    console.log(`[Decrypt API] Trying to check photo subpath: ${path}`);
+                    const trialRes = await fetchFromIPFSGateways(hash, path, true);
+                    if (trialRes.ok) {
+                        targetSubPath = path;
+                        fetchedSuccess = true;
+                        break;
                     }
                 }
-                possibleUrls.push(`https://ipfs.io/ipfs/${hash}/koperasi_anggota/${folderName}/ktp_photo`);
-            }
-            
-            // Scenario 2: Folder contains "koperasi_ktp" subfolder (On-Chain Storage Mode)
-            if (htmlText.includes('koperasi_ktp')) {
-                possibleUrls.push(`https://ipfs.io/ipfs/${hash}/koperasi_ktp/ktp_${userAddressLower}`);
-            }
 
-            possibleUrls.push(`https://ipfs.io/ipfs/${hash}/${folderName}/ktp_photo`);
-            possibleUrls.push(`https://ipfs.io/ipfs/${hash}/ktp_photo`);
-
-            let fetchedSuccess = false;
-            for (const url of possibleUrls) {
-                console.log(`[Decrypt API] Trying to fetch photo from: ${url}`);
-                const trialRes = await fetch(url).catch(() => null);
-                if (trialRes && trialRes.ok) {
-                    photoUrl = url;
-                    fetchedSuccess = true;
-                    break;
+                if (!fetchedSuccess) {
+                    return res.status(404).json({ error: "Photo not found on IPFS" });
                 }
-            }
-
-            if (!fetchedSuccess) {
-                return res.status(404).json({ error: "Photo not found on IPFS" });
             }
         }
 
-        const photoRes = await fetch(photoUrl);
-        if (!photoRes.ok) {
+        // Fetch the binary buffer
+        console.log(`[Decrypt API] Fetching final binary for photo. Subpath: ${targetSubPath}`);
+        const finalRes = await fetchFromIPFSGateways(hash, targetSubPath, true);
+        if (!finalRes.ok) {
             return res.status(404).json({ error: "Photo not found on IPFS" });
         }
 
-        const arrayBuffer = await photoRes.arrayBuffer();
-        const encryptedBuffer = Buffer.from(arrayBuffer);
-
-        const decryptedBuffer = cryptoUtil.decryptBuffer(encryptedBuffer);
+        const decryptedBuffer = cryptoUtil.decryptBuffer(finalRes.buffer);
 
         res.setHeader('Content-Type', 'image/webp');
         res.send(decryptedBuffer);

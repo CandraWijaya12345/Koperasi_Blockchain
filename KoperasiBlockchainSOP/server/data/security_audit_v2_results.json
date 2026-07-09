@@ -1,0 +1,670 @@
+{
+  "timestamp": "2026-06-25T14:29:59.552Z",
+  "totalTests": 66,
+  "passedTests": 66,
+  "failedTests": 0,
+  "percentage": 100,
+  "results": [
+    {
+      "testId": "T01",
+      "category": "AUTH",
+      "name": "GET /api/balance tanpa token",
+      "method": "GET",
+      "path": "/api/balance",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "passed": true
+    },
+    {
+      "testId": "T02",
+      "category": "AUTH",
+      "name": "POST /api/crypto/decrypt tanpa token",
+      "method": "POST",
+      "path": "/api/crypto/decrypt",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "passed": true
+    },
+    {
+      "testId": "T03",
+      "category": "AUTH",
+      "name": "POST /api/withdraw tanpa token",
+      "method": "POST",
+      "path": "/api/withdraw",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "passed": true
+    },
+    {
+      "testId": "T04",
+      "category": "AUTH",
+      "name": "POST /api/register tanpa token",
+      "method": "POST",
+      "path": "/api/register",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "passed": true
+    },
+    {
+      "testId": "T05",
+      "category": "AUTH",
+      "name": "POST /api/payment/create tanpa token",
+      "method": "POST",
+      "path": "/api/payment/create",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "passed": true
+    },
+    {
+      "testId": "T06",
+      "category": "AUTH",
+      "name": "POST /api/payment/repay tanpa token",
+      "method": "POST",
+      "path": "/api/payment/repay",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "passed": true
+    },
+    {
+      "testId": "T07",
+      "category": "AUTH",
+      "name": "GET /api/payment/verify/:id tanpa token",
+      "method": "GET",
+      "path": "/api/payment/verify/TRX-fake-123",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "passed": true
+    },
+    {
+      "testId": "T08",
+      "category": "AUTH",
+      "name": "POST /api/loan/save-details tanpa token",
+      "method": "POST",
+      "path": "/api/loan/save-details",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "passed": true
+    },
+    {
+      "testId": "T09",
+      "category": "AUTH",
+      "name": "GET /api/loan/details/:addr tanpa token",
+      "method": "GET",
+      "path": "/api/loan/details/0x1111111111111111111111111111111111111111",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "passed": true
+    },
+    {
+      "testId": "T10",
+      "category": "AUTH",
+      "name": "POST /api/gov/update-settings tanpa token",
+      "method": "POST",
+      "path": "/api/gov/update-settings",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "passed": true
+    },
+    {
+      "testId": "T11",
+      "category": "AUTH",
+      "name": "POST /api/loan/approve-disburse tanpa token",
+      "method": "POST",
+      "path": "/api/loan/approve-disburse",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "passed": true
+    },
+    {
+      "testId": "T12",
+      "category": "AUTH",
+      "name": "POST /api/loan/survey tanpa token",
+      "method": "POST",
+      "path": "/api/loan/survey",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "passed": true
+    },
+    {
+      "testId": "T13",
+      "category": "AUTH",
+      "name": "POST /api/loan/committee tanpa token",
+      "method": "POST",
+      "path": "/api/loan/committee",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "passed": true
+    },
+    {
+      "testId": "T14",
+      "category": "AUTH",
+      "name": "POST /api/loan/reject tanpa token",
+      "method": "POST",
+      "path": "/api/loan/reject",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "passed": true
+    },
+    {
+      "testId": "T15",
+      "category": "AUTH",
+      "name": "POST /api/gov/generate-bills tanpa token",
+      "method": "POST",
+      "path": "/api/gov/generate-bills",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "passed": true
+    },
+    {
+      "testId": "T16",
+      "category": "AUTH",
+      "name": "POST /api/gov/release-sharing tanpa token",
+      "method": "POST",
+      "path": "/api/gov/release-sharing",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "passed": true
+    },
+    {
+      "testId": "T17",
+      "category": "AUTH",
+      "name": "POST /api/sync-liquidity tanpa token",
+      "method": "POST",
+      "path": "/api/sync-liquidity",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "passed": true
+    },
+    {
+      "testId": "T18",
+      "category": "AUTH",
+      "name": "GET /api/debug/liquidity tanpa token",
+      "method": "GET",
+      "path": "/api/debug/liquidity",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "passed": true
+    },
+    {
+      "testId": "T19",
+      "category": "AUTH",
+      "name": "POST /api/webhook/deposit tanpa token",
+      "method": "POST",
+      "path": "/api/webhook/deposit",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "passed": true
+    },
+    {
+      "testId": "T20",
+      "category": "AUTH",
+      "name": "POST /api/webhook/repay tanpa token",
+      "method": "POST",
+      "path": "/api/webhook/repay",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "passed": true
+    },
+    {
+      "testId": "T21",
+      "category": "AUTH",
+      "name": "POST /api/admin/close-membership tanpa token",
+      "method": "POST",
+      "path": "/api/admin/close-membership",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "passed": true
+    },
+    {
+      "testId": "T22",
+      "category": "AUTH",
+      "name": "GET /api/ipfs/metadata/:hash/:addr tanpa token",
+      "method": "GET",
+      "path": "/api/ipfs/metadata/QmFakeHash123/0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "passed": true
+    },
+    {
+      "testId": "T23",
+      "category": "AUTH",
+      "name": "GET /api/ipfs/photo/:hash/:addr tanpa token",
+      "method": "GET",
+      "path": "/api/ipfs/photo/QmFakeHash123/0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "passed": true
+    },
+    {
+      "testId": "T24",
+      "category": "FAKE_TOKEN",
+      "name": "GET /api/balance dengan token palsu",
+      "method": "GET",
+      "path": "/api/balance",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "passed": true
+    },
+    {
+      "testId": "T25",
+      "category": "FAKE_TOKEN",
+      "name": "POST /api/withdraw dengan token palsu",
+      "method": "POST",
+      "path": "/api/withdraw",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "passed": true
+    },
+    {
+      "testId": "T26",
+      "category": "FAKE_TOKEN",
+      "name": "POST /api/register dengan token palsu",
+      "method": "POST",
+      "path": "/api/register",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "passed": true
+    },
+    {
+      "testId": "T27",
+      "category": "EXPIRED_TOKEN",
+      "name": "GET /api/balance dengan token kadaluarsa",
+      "method": "GET",
+      "path": "/api/balance",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "passed": true
+    },
+    {
+      "testId": "T28",
+      "category": "EXPIRED_TOKEN",
+      "name": "POST /api/crypto/decrypt dengan token kadaluarsa",
+      "method": "POST",
+      "path": "/api/crypto/decrypt",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "passed": true
+    },
+    {
+      "testId": "T29",
+      "category": "RBAC",
+      "name": "Member A akses GET /api/balance (Admin Only)",
+      "method": "GET",
+      "path": "/api/balance",
+      "expectedStatus": 403,
+      "actualStatus": 403,
+      "passed": true
+    },
+    {
+      "testId": "T30",
+      "category": "RBAC",
+      "name": "Admin sah akses GET /api/balance",
+      "method": "GET",
+      "path": "/api/balance",
+      "expectedStatus": 200,
+      "actualStatus": 200,
+      "passed": true
+    },
+    {
+      "testId": "T31",
+      "category": "RBAC",
+      "name": "Member A akses POST /api/webhook/deposit (Admin Only)",
+      "method": "POST",
+      "path": "/api/webhook/deposit",
+      "expectedStatus": 403,
+      "actualStatus": 403,
+      "passed": true
+    },
+    {
+      "testId": "T32",
+      "category": "RBAC",
+      "name": "Member A akses POST /api/webhook/repay (Admin Only)",
+      "method": "POST",
+      "path": "/api/webhook/repay",
+      "expectedStatus": 403,
+      "actualStatus": 403,
+      "passed": true
+    },
+    {
+      "testId": "T33",
+      "category": "RBAC",
+      "name": "Member A akses POST /api/gov/update-settings (Admin Only)",
+      "method": "POST",
+      "path": "/api/gov/update-settings",
+      "expectedStatus": 403,
+      "actualStatus": 403,
+      "passed": true
+    },
+    {
+      "testId": "T34",
+      "category": "RBAC",
+      "name": "Member A akses POST /api/loan/approve-disburse (Admin Only)",
+      "method": "POST",
+      "path": "/api/loan/approve-disburse",
+      "expectedStatus": 403,
+      "actualStatus": 403,
+      "passed": true
+    },
+    {
+      "testId": "T35",
+      "category": "RBAC",
+      "name": "Member A akses POST /api/loan/survey (Admin Only)",
+      "method": "POST",
+      "path": "/api/loan/survey",
+      "expectedStatus": 403,
+      "actualStatus": 403,
+      "passed": true
+    },
+    {
+      "testId": "T36",
+      "category": "RBAC",
+      "name": "Member A akses POST /api/loan/committee (Admin Only)",
+      "method": "POST",
+      "path": "/api/loan/committee",
+      "expectedStatus": 403,
+      "actualStatus": 403,
+      "passed": true
+    },
+    {
+      "testId": "T37",
+      "category": "RBAC",
+      "name": "Member A akses POST /api/loan/reject (Admin Only)",
+      "method": "POST",
+      "path": "/api/loan/reject",
+      "expectedStatus": 403,
+      "actualStatus": 403,
+      "passed": true
+    },
+    {
+      "testId": "T38",
+      "category": "RBAC",
+      "name": "Member A akses POST /api/gov/generate-bills (Admin Only)",
+      "method": "POST",
+      "path": "/api/gov/generate-bills",
+      "expectedStatus": 403,
+      "actualStatus": 403,
+      "passed": true
+    },
+    {
+      "testId": "T39",
+      "category": "RBAC",
+      "name": "Member A akses POST /api/gov/release-sharing (Admin Only)",
+      "method": "POST",
+      "path": "/api/gov/release-sharing",
+      "expectedStatus": 403,
+      "actualStatus": 403,
+      "passed": true
+    },
+    {
+      "testId": "T40",
+      "category": "RBAC",
+      "name": "Member A akses POST /api/sync-liquidity (Admin Only)",
+      "method": "POST",
+      "path": "/api/sync-liquidity",
+      "expectedStatus": 403,
+      "actualStatus": 403,
+      "passed": true
+    },
+    {
+      "testId": "T41",
+      "category": "RBAC",
+      "name": "Member A akses GET /api/debug/liquidity (Admin Only)",
+      "method": "GET",
+      "path": "/api/debug/liquidity",
+      "expectedStatus": 403,
+      "actualStatus": 403,
+      "passed": true
+    },
+    {
+      "testId": "T42",
+      "category": "RBAC",
+      "name": "Member A akses POST /api/admin/close-membership (Admin Only)",
+      "method": "POST",
+      "path": "/api/admin/close-membership",
+      "expectedStatus": 403,
+      "actualStatus": 403,
+      "passed": true
+    },
+    {
+      "testId": "T43",
+      "category": "OWNERSHIP",
+      "name": "Member A buat invoice untuk Member B (Spoofing)",
+      "method": "POST",
+      "path": "/api/payment/create",
+      "expectedStatus": 403,
+      "actualStatus": 403,
+      "passed": true
+    },
+    {
+      "testId": "T44",
+      "category": "OWNERSHIP",
+      "name": "Member A buat invoice untuk diri sendiri (Sah)",
+      "method": "POST",
+      "path": "/api/payment/create",
+      "expectedStatus": 200,
+      "actualStatus": 200,
+      "passed": true
+    },
+    {
+      "testId": "T45",
+      "category": "OWNERSHIP",
+      "name": "Member A withdraw sebagai Member B (Spoofing)",
+      "method": "POST",
+      "path": "/api/withdraw",
+      "expectedStatus": 403,
+      "actualStatus": 403,
+      "passed": true
+    },
+    {
+      "testId": "T46",
+      "category": "OWNERSHIP",
+      "name": "Member A repay sebagai Member B (Spoofing)",
+      "method": "POST",
+      "path": "/api/payment/repay",
+      "expectedStatus": 403,
+      "actualStatus": 403,
+      "passed": true
+    },
+    {
+      "testId": "T47",
+      "category": "OWNERSHIP",
+      "name": "Member A save-details sebagai Member B (Spoofing)",
+      "method": "POST",
+      "path": "/api/loan/save-details",
+      "expectedStatus": 403,
+      "actualStatus": 403,
+      "passed": true
+    },
+    {
+      "testId": "T48",
+      "category": "OWNERSHIP",
+      "name": "Member A register sebagai Member B (Spoofing)",
+      "method": "POST",
+      "path": "/api/register",
+      "expectedStatus": 403,
+      "actualStatus": 403,
+      "passed": true
+    },
+    {
+      "testId": "T49",
+      "category": "OWNERSHIP",
+      "name": "Member A lihat loan details milik Member B",
+      "method": "GET",
+      "path": "/api/loan/details/0x2222222222222222222222222222222222222222",
+      "expectedStatus": 403,
+      "actualStatus": 403,
+      "passed": true
+    },
+    {
+      "testId": "T50",
+      "category": "INJECTION",
+      "name": "XSS payload di field nama registrasi",
+      "method": "POST",
+      "path": "/api/register",
+      "expectedStatus": 400,
+      "actualStatus": 400,
+      "passed": true
+    },
+    {
+      "testId": "T51",
+      "category": "INJECTION",
+      "name": "SQL Injection di path parameter loan details",
+      "method": "GET",
+      "path": "/api/loan/details/0x' OR '1'='1",
+      "expectedStatus": 403,
+      "actualStatus": 403,
+      "passed": true
+    },
+    {
+      "testId": "T52",
+      "category": "INJECTION",
+      "name": "Payload terlalu besar (> 10MB limit)",
+      "method": "POST",
+      "path": "/api/register",
+      "expectedStatus": 413,
+      "actualStatus": 413,
+      "passed": true
+    },
+    {
+      "testId": "T53",
+      "category": "VALIDATION",
+      "name": "POST /api/payment/create tanpa amount",
+      "method": "POST",
+      "path": "/api/payment/create",
+      "expectedStatus": 400,
+      "actualStatus": 400,
+      "passed": true
+    },
+    {
+      "testId": "T54",
+      "category": "VALIDATION",
+      "name": "Registrasi dengan NIK kurang dari 16 digit",
+      "method": "POST",
+      "path": "/api/register",
+      "expectedStatus": 400,
+      "actualStatus": 400,
+      "passed": true
+    },
+    {
+      "testId": "T55",
+      "category": "VALIDATION",
+      "name": "Registrasi dengan format noHP tidak valid",
+      "method": "POST",
+      "path": "/api/register",
+      "expectedStatus": 400,
+      "actualStatus": 400,
+      "passed": true
+    },
+    {
+      "testId": "T56",
+      "category": "VALIDATION",
+      "name": "Registrasi dengan alamat terlalu pendek",
+      "method": "POST",
+      "path": "/api/register",
+      "expectedStatus": 400,
+      "actualStatus": 400,
+      "passed": true
+    },
+    {
+      "testId": "T57",
+      "category": "PUBLIC",
+      "name": "GET / (Health Check Root)",
+      "method": "GET",
+      "path": "/",
+      "expectedStatus": 200,
+      "actualStatus": 200,
+      "passed": true
+    },
+    {
+      "testId": "T58",
+      "category": "PUBLIC",
+      "name": "GET /api/health (Health Monitor)",
+      "method": "GET",
+      "path": "/api/health",
+      "expectedStatus": 200,
+      "actualStatus": 200,
+      "passed": true
+    },
+    {
+      "testId": "T59",
+      "category": "AUTH_LOGIN",
+      "name": "POST /api/auth/login tanpa credentials",
+      "method": "POST",
+      "path": "/api/auth/login",
+      "expectedStatus": 400,
+      "actualStatus": 400,
+      "passed": true
+    },
+    {
+      "testId": "T60",
+      "category": "AUTH_LOGIN",
+      "name": "POST /api/auth/login dengan signature palsu",
+      "method": "POST",
+      "path": "/api/auth/login",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "passed": true
+    },
+    {
+      "testId": "T61",
+      "category": "WEBHOOK",
+      "name": "POST /api/xendit-callback tanpa callback token (DEV MODE - no token set)",
+      "method": "POST",
+      "path": "/api/xendit-callback",
+      "expectedStatus": 200,
+      "actualStatus": 200,
+      "passed": true
+    },
+    {
+      "testId": "T62",
+      "category": "PATH_TRAVERSAL",
+      "name": "Path traversal di IPFS metadata hash",
+      "method": "GET",
+      "path": "/api/ipfs/metadata/..%2F..%2F..%2Fetc%2Fpasswd/0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+      "expectedStatus": 404,
+      "actualStatus": 404,
+      "passed": true
+    },
+    {
+      "testId": "T63",
+      "category": "MISC",
+      "name": "Akses endpoint yang tidak ada",
+      "method": "GET",
+      "path": "/api/nonexistent/route",
+      "expectedStatus": 404,
+      "actualStatus": 404,
+      "passed": true
+    },
+    {
+      "testId": "T64",
+      "category": "MISC",
+      "name": "GET pada endpoint POST-only (/api/payment/create)",
+      "method": "GET",
+      "path": "/api/payment/create",
+      "expectedStatus": 404,
+      "actualStatus": 404,
+      "passed": true
+    },
+    {
+      "testId": "T65",
+      "category": "ISOLATION",
+      "name": "Member A lihat loan details milik Admin",
+      "method": "GET",
+      "path": "/api/loan/details/0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+      "expectedStatus": 403,
+      "actualStatus": 403,
+      "passed": true
+    },
+    {
+      "testId": "T66",
+      "category": "ISOLATION",
+      "name": "Member B lihat loan details milik Member A",
+      "method": "GET",
+      "path": "/api/loan/details/0x1111111111111111111111111111111111111111",
+      "expectedStatus": 403,
+      "actualStatus": 403,
+      "passed": true
+    }
+  ],
+  "failures": []
+}

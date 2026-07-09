@@ -26,10 +26,38 @@ const PendingLoanItem = ({ log, loan, onApprove, onReject, onApproveSurvey, onAp
   const ts = loan?.extractedTimestamp ?? data?.extractedTimestamp ?? Number(args?.waktu) ?? 0;
   const waktu = ts ? new Date(ts * 1000).toLocaleString('id-ID') : 'Baru saja';
 
+  const getAuthToken = () => {
+    const activeAddr = window.ethereum?.selectedAddress;
+    if (activeAddr) {
+      return localStorage.getItem(`auth_token_${activeAddr.toLowerCase()}`);
+    }
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('auth_token_')) {
+        return localStorage.getItem(key);
+      }
+    }
+    return null;
+  };
+
   React.useEffect(() => {
     if (peminjam) {
-      fetch(`http://localhost:5000/api/loan/details/${peminjam}`)
-        .then(res => res.json())
+      const token = getAuthToken();
+      const headers = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      fetch(`http://localhost:5000/api/loan/details/${peminjam}`, { headers })
+        .then(res => {
+          if (res.status === 401) {
+            const activeAddr = window.ethereum?.selectedAddress;
+            if (activeAddr) {
+              localStorage.removeItem(`auth_token_${activeAddr.toLowerCase()}`);
+              window.dispatchEvent(new CustomEvent('auth-unauthorized', { detail: { address: activeAddr } }));
+            }
+          }
+          return res.json();
+        })
         .then(data => {
           if (data.success && data.details) {
             setBankDetails(data.details);

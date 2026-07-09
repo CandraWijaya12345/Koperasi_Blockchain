@@ -4,12 +4,20 @@ import ProfileView from '../components/Profile/ProfileView';
 import PaymentOverlay from '../components/PaymentOverlay';
 import SuccessModal from '../components/SuccessModal';
 
+import { useNavigate } from 'react-router-dom';
 import { useWallet } from '../hooks/useWallet';
 import { useKoperasi } from '../hooks/useKoperasi';
 import { layoutStyles as layout } from '../styles/layout';
 
 const ProfilePage = () => {
-  const { account, isConnecting, connectWallet, disconnectWallet, error: walletError } = useWallet();
+  const navigate = useNavigate();
+  const { account, isConnecting, isCheckingConnection, connectWallet, disconnectWallet, error: walletError } = useWallet();
+
+  React.useEffect(() => {
+    if (!isCheckingConnection && !account && !isConnecting) {
+      navigate('/', { replace: true });
+    }
+  }, [account, isConnecting, isCheckingConnection, navigate]);
 
   const {
     message,
@@ -33,6 +41,7 @@ const ProfilePage = () => {
         onDisconnect={disconnectWallet}
         isLoading={isConnecting || isLoading}
         activeTab="profil" // Force active tab for navbar styling
+        isMember={anggotaData?.terdaftar && anggotaData?.status === 1}
       />
 
       {isPaymentLocked && (

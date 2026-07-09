@@ -82,16 +82,49 @@ const UserPage = () => {
   // [BARU] States for Iframe Payment Modal
   const [activeInvoiceUrl, setActiveInvoiceUrl] = useState(null);
   const [showIframe, setShowIframe] = useState(false);
-  const [activeExternalId, setActiveExternalId] = useState(() => sessionStorage.getItem('activeExternalId') || null);
+  const [activeExternalId, setActiveExternalId] = useState(() => {
+    const addr = account ? account.toLowerCase() : null;
+    return addr ? sessionStorage.getItem(`activeExternalId_${addr}`) : null;
+  });
 
   // [BARU] States for Transaction Stage Tracking
-  const [txModal, setTxModal] = useState({
-    visible: false,
-    stage: 1,
-    message: '',
-    type: 'xendit',
-    error: null
+  const [txModal, setTxModal] = useState(() => {
+    const addr = account ? account.toLowerCase() : null;
+    const isLocked = addr ? sessionStorage.getItem(`isPaymentLocked_${addr}`) === 'true' : false;
+    const isSuccess = addr ? sessionStorage.getItem(`paymentSuccess_${addr}`) === 'true' : false;
+    if (isLocked && !isSuccess) {
+      return {
+        visible: true,
+        stage: 3,
+        message: 'Mendeteksi transaksi aktif... Menunggu verifikasi blockchain otomatis.',
+        type: 'xendit',
+        error: null
+      };
+    }
+    return { visible: false, stage: 1, message: '', type: 'xendit', error: null };
   });
+
+  // [MITIGASI] Reload account-specific payment locks/invoice IDs when account switches
+  useEffect(() => {
+    const addr = account ? account.toLowerCase() : null;
+    const isLocked = addr ? sessionStorage.getItem(`isPaymentLocked_${addr}`) === 'true' : false;
+    const isSuccess = addr ? sessionStorage.getItem(`paymentSuccess_${addr}`) === 'true' : false;
+    const extId = addr ? sessionStorage.getItem(`activeExternalId_${addr}`) : null;
+
+    setActiveExternalId(extId);
+    
+    if (isLocked && !isSuccess) {
+      setTxModal({
+        visible: true,
+        stage: 3,
+        message: 'Mendeteksi transaksi aktif... Menunggu verifikasi blockchain otomatis.',
+        type: 'xendit',
+        error: null
+      });
+    } else {
+      setTxModal({ visible: false, stage: 1, message: '', type: 'xendit', error: null });
+    }
+  }, [account]);
 
   // [NEW] Listen for PAYMENT_SUCCESS_IFRAME message from Xendit redirect iframe
   useEffect(() => {
@@ -140,18 +173,6 @@ const UserPage = () => {
     }
   }, [isPaymentLocked, paymentSuccess, showIframe, txModal.visible, txModal.type, txModal.stage]);
 
-  // [MITIGASI] Recover state on refresh if locked
-  useEffect(() => {
-    if (isPaymentLocked && !paymentSuccess && !txModal.visible) {
-      setTxModal({
-        visible: true,
-        stage: 3,
-        message: 'Mendeteksi transaksi aktif... Menunggu verifikasi blockchain otomatis.',
-        type: 'xendit'
-      });
-    }
-  }, [isPaymentLocked, paymentSuccess, txModal.visible]);
-
   // Wrappers to handle invoiceUrl from hook
   const handlePaymentTrigger = async (paymentFunc, ...args) => {
     try {
@@ -160,7 +181,9 @@ const UserPage = () => {
       if (result && result.invoiceUrl) {
         setActiveInvoiceUrl(result.invoiceUrl);
         setActiveExternalId(result.externalId || null);
-        sessionStorage.setItem('activeExternalId', result.externalId || '');
+        if (account) {
+          sessionStorage.setItem(`activeExternalId_${account.toLowerCase()}`, result.externalId || '');
+        }
         setShowIframe(true);
       }
       return result;
@@ -173,19 +196,25 @@ const UserPage = () => {
   };
 
   const handleClosePayment = async () => {
-    const extId = activeExternalId || sessionStorage.getItem('activeExternalId');
+    const addrLower = account ? account.toLowerCase() : '';
+    const extId = activeExternalId || (addrLower ? sessionStorage.getItem(`activeExternalId_${addrLower}`) : null);
     if (extId) {
       // Show verification stage on the status modal
       setTxModal({ visible: true, stage: 1, message: 'Memverifikasi status pembayaran terakhir di Xendit...', type: 'xendit', error: null });
       try {
-        const res = await fetch(`http://localhost:5000/api/payment/verify/${extId}`);
+        const token = account ? localStorage.getItem(`auth_token_${account.toLowerCase()}`) : null;
+        const headers = {};
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+        const res = await fetch(`http://localhost:5000/api/payment/verify/${extId}`, { headers });
         const data = await res.json();
         if (data.success && (data.status === 'PAID' || data.status === 'SETTLED')) {
           // Payment was actually completed! Advance to blockchain stage
           console.log("[Close Payment] Verified as PAID. Keeping locked for blockchain confirmation.");
           setShowIframe(false);
           setActiveExternalId(null);
-          sessionStorage.removeItem('activeExternalId');
+          if (addrLower) sessionStorage.removeItem(`activeExternalId_${addrLower}`);
           setTxModal(prev => ({
             ...prev,
             stage: 3,
@@ -202,7 +231,7 @@ const UserPage = () => {
     cancelPayment();
     setShowIframe(false);
     setActiveExternalId(null);
-    sessionStorage.removeItem('activeExternalId');
+    if (addrLower) sessionStorage.removeItem(`activeExternalId_${addrLower}`);
     setTxModal({ visible: false, stage: 1, message: '', type: 'xendit' });
   };
 
@@ -214,12 +243,15 @@ const UserPage = () => {
         if (msg.includes('Blockchain')) setTxModal(prev => ({ ...prev, stage: 2, message: msg }));
         else if (msg.includes('konfirmasi')) setTxModal(prev => ({ ...prev, stage: 2, message: msg }));
         else setTxModal(prev => ({ ...prev, message: msg }));
+        if (onProgress) onProgress(msg);
       });
       
       setTxModal(prev => ({ ...prev, stage: 3, message: 'Transaksi dikonfirmasi! Memperbarui saldo Anda...' }));
+      if (onProgress) onProgress('Memperbarui saldo...');
       await triggerTripleSync();
       
       setTxModal(prev => ({ ...prev, stage: 4, message: 'Berhasil! Saldo Simpanan Wajib Anda telah bertambah.' }));
+      if (onProgress) onProgress('');
       return tx;
     } catch (err) {
       console.error("Internal payment error:", err);
@@ -386,6 +418,7 @@ const UserPage = () => {
         isLoading={isConnecting || isLoading}
         activeTab={activeTab}
         onNavigate={setActiveTab}
+        isMember={anggotaData?.terdaftar && anggotaData?.status === 1}
       />
 
       {/* WATCHDOG SYSTEM HEALTH BANNER */}

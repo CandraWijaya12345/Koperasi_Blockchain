@@ -1,5 +1,6 @@
 // components/HistoryList.jsx
 import React from 'react';
+import { ethers } from 'ethers';
 import { formatCurrency, formatrupiah } from '../utils/format';
 
 const getArg = (args, name, index) => {
@@ -9,6 +10,33 @@ const getArg = (args, name, index) => {
     if (typeof args.length === 'number' && index < args.length) return args[index];
   } catch (e) { return null; }
   return null;
+};
+
+const extractActorAddress = (args) => {
+  if (!args) return '';
+  const keys = ['surveyor', 'committee', 'anggota', 'peminjam', 'user', 'admin', 'dari', 'owner', 'caller'];
+  for (const key of keys) {
+    if (args[key] && typeof args[key] === 'string' && args[key].startsWith('0x')) {
+      return args[key];
+    }
+  }
+  for (const key in args) {
+    try {
+      const val = args[key];
+      if (typeof val === 'string' && /^0x[a-fA-F0-9]{40}$/.test(val)) {
+        return val;
+      }
+    } catch (e) {}
+  }
+  if (typeof args.length === 'number') {
+    for (let i = 0; i < args.length; i++) {
+      const val = args[i];
+      if (typeof val === 'string' && /^0x[a-fA-F0-9]{40}$/.test(val)) {
+        return val;
+      }
+    }
+  }
+  return '';
 };
 
 const typeConfig = {
@@ -28,6 +56,29 @@ const typeConfig = {
     getAmount: (args) => `+${formatCurrency(formatrupiah(getArg(args, 'jumlah', 1) || 0))}`,
     sign: '+',
   },
+  AnggotaBaru: {
+    gradient: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+    bgLight: '#eff6ff',
+    color: '#1d4ed8',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="8.5" cy="7" r="4" />
+      </svg>
+    ),
+    getLabel: (args, _, isAdminView, log) => {
+      const userAddr = getArg(args, 'user', 0);
+      if (userAddr && log?.address && userAddr.toLowerCase() === log.address.toLowerCase()) {
+        return 'Registrasi Akun Reserve Koperasi';
+      }
+      if (isAdminView) {
+        const nama = getArg(args, 'nama', 1) || 'Anggota Baru';
+        return `Pendaftaran Anggota Baru: ${nama}`;
+      }
+      return 'Mendaftar sebagai Anggota';
+    },
+    getAmount: () => 'Member',
+    sign: '',
+  },
   DepositTercatat: {
     gradient: 'linear-gradient(135deg, #10b981, #059669)',
     bgLight: '#ecfdf5',
@@ -37,7 +88,11 @@ const typeConfig = {
         <line x1="12" y1="19" x2="12" y2="5" /><polyline points="5 12 12 5 19 12" />
       </svg>
     ),
-    getLabel: (args) => {
+    getLabel: (args, _, __, log) => {
+      const userAddr = getArg(args, 'user', 0);
+      if (userAddr && log?.address && userAddr.toLowerCase() === log.address.toLowerCase()) {
+        return 'Sinkronisasi Likuiditas (Mint)';
+      }
       const jenis = getArg(args, 'jenis', 2) || '';
       return jenis.startsWith('Simpanan') ? jenis : `Simpanan ${jenis}`;
     },
@@ -66,7 +121,13 @@ const typeConfig = {
         <line x1="12" y1="5" x2="12" y2="19" /><polyline points="19 12 12 19 5 12" />
       </svg>
     ),
-    getLabel: () => 'Penarikan',
+    getLabel: (args, _, __, log) => {
+      const userAddr = getArg(args, 'user', 0);
+      if (userAddr && log?.address && userAddr.toLowerCase() === log.address.toLowerCase()) {
+        return 'Sinkronisasi Likuiditas (Burn)';
+      }
+      return 'Penarikan';
+    },
     getAmount: (args) => `-${formatCurrency(formatrupiah(getArg(args, 'jumlah', 1) || 0))}`,
     sign: '-',
   },
@@ -92,9 +153,16 @@ const typeConfig = {
         <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" />
       </svg>
     ),
-    getLabel: () => 'Pinjaman Disetujui',
-    getAmount: (args) => `ID #${Number(getArg(args, 'id', 0) || 0)}`,
-    sign: '',
+    getLabel: () => 'Pencairan Pinjaman (Disetujui)',
+    getAmount: (args, _, isAdminView) => {
+      const amount = getArg(args, 'jumlah', null) || getArg(args, 'amount', null);
+      if (amount) {
+        const prefix = isAdminView ? '-' : '+';
+        return `${prefix}${formatCurrency(formatrupiah(amount))}`;
+      }
+      return `ID #${Number(getArg(args, 'id', 0) || 0)}`;
+    },
+    sign: (isAdminView) => isAdminView ? '-' : '+',
   },
   AngsuranDibayar: {
     gradient: 'linear-gradient(135deg, #3b82f6, #2563eb)',
@@ -252,7 +320,7 @@ const typeConfig = {
         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
       </svg>
     ),
-    getLabel: () => 'Rapat Komite Kredit Disetujui',
+    getLabel: () => 'Komite Kredit Disetujui',
     getAmount: (args) => `ID #${Number(getArg(args, 'loanId', 0) || 0)}`,
     sign: '',
   },
@@ -342,8 +410,51 @@ const defaultConfig = {
   sign: '',
 };
 
+const txSenderCache = {};
+
 const HistoryList = ({ history, onRefresh, isLoading, isAdminView }) => {
   const [selectedLog, setSelectedLog] = React.useState(null);
+  const [resolvedActor, setResolvedActor] = React.useState('');
+
+  React.useEffect(() => {
+    if (!selectedLog) {
+      setResolvedActor('');
+      return;
+    }
+
+    const actorFromArgs = extractActorAddress(selectedLog.args);
+    if (actorFromArgs) {
+      setResolvedActor(actorFromArgs);
+      return;
+    }
+
+    if (txSenderCache[selectedLog.transactionHash]) {
+      setResolvedActor(txSenderCache[selectedLog.transactionHash]);
+      return;
+    }
+
+    let isMounted = true;
+    const fetchTxSender = async () => {
+      try {
+        if (window.ethereum && selectedLog.transactionHash) {
+          const provider = new ethers.BrowserProvider(window.ethereum);
+          const tx = await provider.getTransaction(selectedLog.transactionHash);
+          if (tx && tx.from && isMounted) {
+            txSenderCache[selectedLog.transactionHash] = tx.from;
+            setResolvedActor(tx.from);
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to fetch tx sender:", err);
+      }
+    };
+
+    fetchTxSender();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedLog]);
 
   // Group history by date
   const groupByDate = (items) => {
@@ -371,14 +482,15 @@ const HistoryList = ({ history, onRefresh, isLoading, isAdminView }) => {
     const ts = log.extractedTimestamp || Number(args?.waktu) || 0;
     const waktu = ts ? new Date(ts * 1000).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-';
     const waktuFull = ts ? new Date(ts * 1000).toLocaleString('id-ID') : '-';
-    const label = config.getLabel(args, eventName);
-    const amount = config.getAmount(args);
+    const label = config.getLabel(args, eventName, isAdminView, log);
+    const amount = config.getAmount(args, eventName, isAdminView, log);
+    const resolvedSign = typeof config.sign === 'function' ? config.sign(isAdminView) : config.sign;
     const shortHash = transactionHash.substring(0, 6) + '...' + transactionHash.substring(transactionHash.length - 4);
 
     return (
       <div
         key={`${transactionHash}-${log.logIndex ?? idx}`}
-        onClick={() => setSelectedLog({ ...log, label, amount, time: waktuFull, color: config.color, gradient: config.gradient })}
+        onClick={() => setSelectedLog({ ...log, label, amount, time: waktuFull, color: config.color, gradient: config.gradient, resolvedSign })}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -421,14 +533,14 @@ const HistoryList = ({ history, onRefresh, isLoading, isAdminView }) => {
           </div>
           <div style={{ fontSize: '0.78rem', color: '#94a3b8', display: 'flex', flexWrap: 'wrap', gap: '4px 8px' }}>
             <span>{waktu} · {shortHash}</span>
-            {isAdminView && (
-              <span style={{ color: '#3b82f6', fontWeight: 600, background: '#eff6ff', padding: '0px 6px', borderRadius: '4px' }}>
-                {(function() {
-                  const addr = log.args?.anggota || log.args?.peminjam || log.args?.user || log.args?.[0] || '';
-                  return typeof addr === 'string' ? `${addr.substring(0,6)}...${addr.substring(addr.length-4)}` : '';
-                })()}
-              </span>
-            )}
+            {isAdminView && (function() {
+              const actorAddr = extractActorAddress(log.args);
+              return actorAddr ? (
+                <span style={{ color: '#3b82f6', fontWeight: 600, background: '#eff6ff', padding: '0px 6px', borderRadius: '4px' }}>
+                  {`${actorAddr.substring(0,6)}...${actorAddr.substring(actorAddr.length-4)}`}
+                </span>
+              ) : null;
+            })()}
           </div>
         </div>
 
@@ -437,7 +549,7 @@ const HistoryList = ({ history, onRefresh, isLoading, isAdminView }) => {
           <div style={{
             fontWeight: 700,
             fontSize: '0.95rem',
-            color: config.sign === '+' ? '#059669' : config.sign === '-' ? '#dc2626' : config.color,
+            color: resolvedSign === '+' ? '#059669' : resolvedSign === '-' ? '#dc2626' : config.color,
           }}>
             {amount}
           </div>
@@ -572,21 +684,11 @@ const HistoryList = ({ history, onRefresh, isLoading, isAdminView }) => {
             <div style={{ padding: '20px 24px 24px' }}>
               <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
                 <DetailRow label="Transaction Hash" value={selectedLog.transactionHash} mono />
-                {selectedLog.args && (
-                  <DetailRow
-                    label="Dari / Aktor"
-                    value={(function () {
-                      const { eventName, args } = selectedLog;
-                      if (!args) return '-';
-                      if (getArg(args, 'anggota', null)) return getArg(args, 'anggota', 0);
-                      if (getArg(args, 'peminjam', null)) return getArg(args, 'peminjam', 1);
-                      
-                      const candidate = getArg(args, 'user', 0) || getArg(args, 'peminjam', 1);
-                      return (candidate && typeof candidate === 'string' && candidate.startsWith('0x')) ? candidate : '-';
-                    })()}
-                    mono
-                  />
-                )}
+                <DetailRow
+                  label="Dari / Aktor"
+                  value={resolvedActor || extractActorAddress(selectedLog.args) || '-'}
+                  mono
+                />
               </div>
 
               <a

@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { cardStyles } from '../../styles/cards';
 import InlineMessage from '../InlineMessage';
 import { formatCurrency, formatrupiah, parserupiah } from '../../utils/format';
+import { CONTRACT_ADDRESS } from '../../utils/constants';
 
 // --- Professional Icons ---
 const SyncIcon = () => (
@@ -21,18 +22,15 @@ const AlertIcon = ({ size = 20 }) => (
 const localStyles = {
   header: {
     marginBottom: '24px',
-    paddingBottom: '12px',
-    borderBottom: '2px solid #f1f5f9',
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center'
   },
   title: {
-    fontSize: '1.5rem',
-    fontWeight: '800',
+    fontSize: '1.25rem',
+    fontWeight: '700',
     color: '#0f172a',
-    margin: 0,
-    letterSpacing: '-0.025em'
+    margin: 0
   },
   grid: {
     display: 'grid',
@@ -246,11 +244,10 @@ const SHUConfirmationModal = ({ stats, members, sharingPercent, onConfirm, onCan
 
 const GovernancePanel = ({ stats, config, members, onSync, onGenerateBills, onReleaseSharing, isLoading }) => {
   const [billAmount, setBillAmount] = useState('25000');
-  const [sharingPercent, setSharingPercent] = useState('100');
+  const [searchQuery, setSearchQuery] = useState('');
   const [msg, setMsg] = useState('');
   const [isError, setIsError] = useState(false);
   const [localLoading, setLocalLoading] = useState(false);
-  const [showConfirmSHU, setShowConfirmSHU] = useState(false);
 
   // Synchronize dynamic default bill amount from Config
   useEffect(() => {
@@ -266,7 +263,6 @@ const GovernancePanel = ({ stats, config, members, onSync, onGenerateBills, onRe
     try {
       await fn(params, (m) => setMsg(m));
       setMsg('Operasi berhasil diselesaikan.');
-      setShowConfirmSHU(false);
       setTimeout(() => setMsg(''), 5000);
     } catch (e) {
       console.error(e);
@@ -276,120 +272,136 @@ const GovernancePanel = ({ stats, config, members, onSync, onGenerateBills, onRe
     setLocalLoading(false);
   };
 
+  const filteredMembers = (members || []).filter(m => {
+    // Exclude cooperative reserve account
+    if (m.address.toLowerCase() === CONTRACT_ADDRESS.toLowerCase()) return false;
+
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      const nameMatch = (m.nama || '').toLowerCase().includes(q);
+      const addrMatch = (m.address || '').toLowerCase().includes(q);
+      return nameMatch || addrMatch;
+    }
+    return true;
+  });
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-      <div style={localStyles.header}>
-        <h2 style={localStyles.title}>Manajemen Keuangan</h2>
-        <div style={{ fontSize: '0.875rem', color: '#64748b', fontWeight: '500' }}>
-          Governance Console v2.0
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+
+      {/* Penerbitan Tagihan Card */}
+      <div style={localStyles.card}>
+        <div style={localStyles.cardHeader}>
+          <div style={{ ...localStyles.iconWrapper, backgroundColor: '#f5f3ff', color: '#6d28d9' }}><BillIcon /></div>
+          <h3 style={localStyles.cardTitle}>Penerbitan Tagihan</h3>
         </div>
-      </div>
-
-      <div style={localStyles.grid}>
-
-        {/* SYNC LIQUIDITY */}
-        <div style={localStyles.card}>
-          <div style={localStyles.cardHeader}>
-            <div style={localStyles.iconWrapper}><SyncIcon /></div>
-            <h3 style={localStyles.cardTitle}>Sinkronisasi Likuiditas</h3>
-          </div>
-          <p style={localStyles.description}>
-            Penyelarasan saldo kas Xendit dengan cadangan Rupiah di blockchain untuk menjaga stabilitas nilai 1:1.
-          </p>
-          <div style={localStyles.statsBox}>
-            <div style={localStyles.statRow}>
-              <span style={localStyles.statLabel}>Saldo Xendit</span>
-              <span style={localStyles.statValue}>{formatCurrency(stats.xenditBalance || '0')}</span>
-            </div>
-            <div style={{ ...localStyles.statRow, marginBottom: 0 }}>
-              <span style={localStyles.statLabel}>Saldo Kontrak</span>
-              <span style={localStyles.statValue}>{formatCurrency(formatrupiah(parserupiah(stats.contractBalance || '0')))}</span>
-            </div>
+        <p style={localStyles.description}>
+          Otomasi penerbitan tagihan Simpanan Wajib bulanan untuk seluruh anggota koperasi. 
+          <span style={{ color: '#ef4444', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
+            <AlertIcon size={14} /> Akumulatif: Menambah tagihan yang sudah ada.
+          </span>
+        </p>
+        <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: '8px' }}>
+          <div style={{ flex: 1, minWidth: '200px' }}>
+            <label style={localStyles.inputLabel}>Nominal Per Anggota (IDR)</label>
+            <input
+              type="number"
+              style={{ ...localStyles.input, marginBottom: 0 }}
+              value={billAmount}
+              onChange={(e) => setBillAmount(e.target.value)}
+            />
           </div>
           <button
-            style={{ ...localStyles.button, backgroundColor: '#1e40af' }}
-            onClick={() => handleAction(onSync)}
-            disabled={localLoading || isLoading}
-          >
-            {localLoading ? 'Memproses...' : 'Jalankan Sinkronisasi'}
-          </button>
-        </div>
-
-        {/* MONTHLY BILLS */}
-        <div style={localStyles.card}>
-          <div style={localStyles.cardHeader}>
-            <div style={{ ...localStyles.iconWrapper, backgroundColor: '#f5f3ff', color: '#6d28d9' }}><BillIcon /></div>
-            <h3 style={localStyles.cardTitle}>Penerbitan Tagihan</h3>
-          </div>
-          <p style={localStyles.description}>
-            Otomasi penerbitan tagihan Simpanan Wajib bulanan untuk seluruh anggota koperasi. 
-            <span style={{ color: '#ef4444', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
-              <AlertIcon size={14} /> Akumulatif: Menambah tagihan yang sudah ada.
-            </span>
-          </p>
-          <label style={localStyles.inputLabel}>Nominal Per Anggota (IDR)</label>
-          <input
-            type="number"
-            style={localStyles.input}
-            value={billAmount}
-            onChange={(e) => setBillAmount(e.target.value)}
-          />
-          <button
-            style={{ ...localStyles.button, backgroundColor: '#6d28d9' }}
+            style={{ ...localStyles.button, backgroundColor: '#6d28d9', marginTop: 0, height: '42px', padding: '0 24px' }}
             onClick={() => handleAction(onGenerateBills, billAmount)}
             disabled={localLoading || isLoading}
           >
-            Penerbitan Massal
+            {localLoading ? 'Memproses...' : 'Penerbitan Massal'}
           </button>
         </div>
+      </div>
 
-        {/* PROFIT SHARING (Hidden for Presentation/UAT) */}
-        {/*
-        <div style={localStyles.card}>
-          <div style={localStyles.cardHeader}>
-            <div style={{ ...localStyles.iconWrapper, backgroundColor: '#ecfdf5', color: '#059669' }}><ProfitIcon /></div>
-            <h3 style={localStyles.cardTitle}>Distribusi SHU</h3>
+      {/* History / Daftar Tagihan Anggota Card */}
+      <div style={localStyles.card}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+          <div>
+            <h3 style={localStyles.cardTitle}>Daftar & Status Tagihan Anggota</h3>
+            <p style={{ ...localStyles.description, margin: '4px 0 0 0' }}>
+              Daftar seluruh anggota beserta status tagihan berjalan saat ini.
+            </p>
           </div>
-          <p style={localStyles.description}>
-            Pembagian Sisa Hasil Usaha (SHU) kepada anggota berdasarkan proporsi simpanan aktif mereka.
-          </p>
-          <div style={{ ...localStyles.statsBox, backgroundColor: '#ecfdf5', borderColor: '#d1fae5' }}>
-             <div style={{ ...localStyles.statRow, marginBottom: 0 }}>
-              <span style={{ ...localStyles.statLabel, color: '#065f46' }}>Profit Akumulasi</span>
-              <span style={{ ...localStyles.statValue, color: '#047857' }}>{formatCurrency(stats.profitBelumDibagi || '0')}</span>
-            </div>
-          </div>
-          <label style={localStyles.inputLabel}>Persentase Alokasi (%)</label>
           <input 
-            type="number"
-            style={localStyles.input}
-            value={sharingPercent}
-            onChange={(e) => setSharingPercent(e.target.value)}
+            type="text"
+            placeholder="Cari nama atau alamat..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              padding: '10px 16px',
+              borderRadius: '8px',
+              border: '1px solid #cbd5e1',
+              fontSize: '0.875rem',
+              width: '260px',
+              outline: 'none',
+              transition: 'border-color 0.2s ease'
+            }}
           />
-          <button 
-            style={{ ...localStyles.button, backgroundColor: '#059669' }}
-            onClick={() => setShowConfirmSHU(true)}
-            disabled={localLoading || isLoading || (stats.rawProfit || 0n) === 0n}
-          >
-            Mulai Distribusi
-          </button>
         </div>
-        */}
 
+        <div style={{ borderRadius: '12px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem', textAlign: 'left' }}>
+            <thead style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+              <tr>
+                <th style={{ padding: '12px 16px', color: '#64748b', fontWeight: '600' }}>Nama Anggota</th>
+                <th style={{ padding: '12px 16px', color: '#64748b', fontWeight: '600' }}>Alamat Wallet</th>
+                <th style={{ padding: '12px 16px', color: '#64748b', fontWeight: '600', textAlign: 'right' }}>Jumlah Tagihan</th>
+                <th style={{ padding: '12px 16px', color: '#64748b', fontWeight: '600', textAlign: 'center' }}>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredMembers.length > 0 ? (
+                filteredMembers.map((m, idx) => {
+                  const billVal = m.tagihanWajib ? BigInt(m.tagihanWajib.toString()) : 0n;
+                  const hasBill = billVal > 0n;
+                  return (
+                    <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9', backgroundColor: idx % 2 === 0 ? '#fff' : '#fafafa' }}>
+                      <td style={{ padding: '12px 16px', fontWeight: '600', color: '#1e293b' }}>
+                        {m.nama || 'Tanpa Nama'}
+                      </td>
+                      <td style={{ padding: '12px 16px', fontFamily: 'monospace', color: '#64748b' }}>
+                        {m.address}
+                      </td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '700', color: hasBill ? '#dc2626' : '#1e293b' }}>
+                        {formatCurrency(formatrupiah(billVal))}
+                      </td>
+                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                        <span style={{
+                          display: 'inline-block',
+                          padding: '4px 10px',
+                          borderRadius: '12px',
+                          fontSize: '0.75rem',
+                          fontWeight: '700',
+                          backgroundColor: hasBill ? '#fef2f2' : '#f0fdf4',
+                          color: hasBill ? '#991b1b' : '#166534',
+                          border: `1px solid ${hasBill ? '#fca5a5' : '#bbf7d0'}`
+                        }}>
+                          {hasBill ? 'Belum Dibayar' : 'Lunas'}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan="4" style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+                    Tidak ada data anggota ditemukan.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <InlineMessage message={msg} isError={isError} />
-
-      {showConfirmSHU && (
-        <SHUConfirmationModal
-          stats={stats}
-          members={members}
-          sharingPercent={sharingPercent}
-          onCancel={() => setShowConfirmSHU(false)}
-          onConfirm={() => handleAction(onReleaseSharing, sharingPercent)}
-          isLoading={localLoading}
-        />
-      )}
     </div>
   );
 };

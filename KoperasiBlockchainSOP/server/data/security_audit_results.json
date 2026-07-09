@@ -1,0 +1,72 @@
+{
+  "timestamp": "2026-06-24T11:08:57.118Z",
+  "totalTests": 8,
+  "passedTests": 8,
+  "failedTests": 0,
+  "results": [
+    {
+      "category": "AUTHENTICATION",
+      "name": "Block unauthenticated access to /api/balance",
+      "path": "/api/balance",
+      "method": "GET",
+      "passed": true,
+      "status": 401
+    },
+    {
+      "category": "AUTHENTICATION",
+      "name": "Block unauthenticated access to /api/crypto/decrypt",
+      "path": "/api/crypto/decrypt",
+      "method": "POST",
+      "passed": true,
+      "status": 401
+    },
+    {
+      "category": "AUTHENTICATION",
+      "name": "Block unauthenticated access to /api/withdraw",
+      "path": "/api/withdraw",
+      "method": "POST",
+      "passed": true,
+      "status": 401
+    },
+    {
+      "category": "AUTHENTICATION",
+      "name": "Block access with invalid/fake JWT token",
+      "path": "/api/ipfs/metadata/QmYZWRMw72BTeAzsg38iGvmYjc6Du58nyV5Yaam4ars7hT/0xb0760ccab9a66d8529e80b3ec3e17f3c7d8e1c3c",
+      "method": "GET",
+      "passed": true,
+      "status": 401
+    },
+    {
+      "category": "ROLE-BASED ACCESS CONTROL (RBAC)",
+      "name": "Block non-admin (member) from accessing /api/balance",
+      "path": "/api/balance",
+      "method": "GET",
+      "passed": true,
+      "status": 403
+    },
+    {
+      "category": "ROLE-BASED ACCESS CONTROL (RBAC)",
+      "name": "Allow authorized Admin to access /api/balance",
+      "path": "/api/balance",
+      "method": "GET",
+      "passed": true,
+      "status": 200
+    },
+    {
+      "category": "OWNERSHIP PROTECTION",
+      "name": "Block Member A from creating a payment for Member B (Spoofing)",
+      "path": "/api/payment/create",
+      "method": "POST",
+      "passed": true,
+      "status": 403
+    },
+    {
+      "category": "OWNERSHIP PROTECTION",
+      "name": "Allow Member A to create a payment for their own account",
+      "path": "/api/payment/create",
+      "method": "POST",
+      "passed": true,
+      "status": 200
+    }
+  ]
+}

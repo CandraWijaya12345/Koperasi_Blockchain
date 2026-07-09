@@ -1,13 +1,34 @@
-// components/Navbar.jsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { navbarStyles as styles } from '../styles/navbar';
 import ConfirmationModal from './ConfirmationModal';
+import { rupiah_ADDRESS } from '../utils/constants';
 
-const Navbar = ({ account, onConnect, onDisconnect, isLoading, onNavigate, activeTab }) => {
+const Navbar = ({ account, onConnect, onDisconnect, isLoading, onNavigate, activeTab, isMember = true }) => {
     const navigate = useNavigate();
     const [showConfirm, setShowConfirm] = useState(false);
 
+    const addIDRToMetaMask = async () => {
+        if (!window.ethereum) {
+            alert("Harap install MetaMask terlebih dahulu");
+            return;
+        }
+        try {
+            await window.ethereum.request({
+                method: 'wallet_watchAsset',
+                params: {
+                    type: 'ERC20',
+                    options: {
+                        address: rupiah_ADDRESS,
+                        symbol: 'IDR',
+                        decimals: 18,
+                    },
+                },
+            });
+        } catch (error) {
+            console.error("Gagal menambahkan IDR ke MetaMask:", error);
+        }
+    };
     const short =
         account && account.length > 10
             ? `${account.substring(0, 6)}...${account.substring(account.length - 4)}`
@@ -105,26 +126,52 @@ const Navbar = ({ account, onConnect, onDisconnect, isLoading, onNavigate, activ
                             </button>
                         ) : (
                             <div style={styles.walletInfo}>
-                                <div 
-                                    onClick={() => navigate('/profil')}
-                                    style={{ 
-                                        cursor: 'pointer', 
-                                        display: 'flex', 
-                                        alignItems: 'center', 
-                                        justifyContent: 'center',
-                                        width: '38px',
-                                        height: '38px',
-                                        borderRadius: '50%',
-                                        backgroundColor: activeTab === 'profil' ? '#dbeafe' : '#f1f5f9',
-                                        color: activeTab === 'profil' ? '#2563eb' : '#64748b',
-                                        transition: 'all 0.2s',
-                                        border: '1px solid #e5e7eb'
-                                    }}
-                                    title="Akun Saya"
-                                >
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                                </div>
-                                <div style={styles.walletAddress}>{short}</div>
+                                 {isMember && (
+                                     <button
+                                          onClick={addIDRToMetaMask}
+                                          className="btn-animate"
+                                          style={{
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              gap: '6px',
+                                              padding: '6px 12px',
+                                              backgroundColor: '#eff6ff',
+                                              border: '1px solid #bfdbfe',
+                                              borderRadius: '8px',
+                                              fontSize: '0.75rem',
+                                              fontWeight: '700',
+                                              color: '#2563eb',
+                                              cursor: 'pointer',
+                                              marginRight: '12px'
+                                          }}
+                                          title="Tambahkan IDR ke MetaMask"
+                                      >
+                                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                          <span>IDR</span>
+                                      </button>
+                                 )}
+                                 {isMember && (
+                                     <div 
+                                         onClick={() => navigate('/profil')}
+                                         style={{ 
+                                             cursor: 'pointer', 
+                                             display: 'flex', 
+                                             alignItems: 'center', 
+                                             justifyContent: 'center',
+                                             width: '38px',
+                                             height: '38px',
+                                             borderRadius: '50%',
+                                             backgroundColor: activeTab === 'profil' ? '#dbeafe' : '#f1f5f9',
+                                             color: activeTab === 'profil' ? '#2563eb' : '#64748b',
+                                             transition: 'all 0.2s',
+                                             border: '1px solid #e5e7eb'
+                                         }}
+                                         title="Akun Saya"
+                                     >
+                                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                                     </div>
+                                 )}
+                                 <div style={styles.walletAddress}>{short}</div>
                                 <button
                                     onClick={handleLogoutClick}
                                     className="btn-animate"
