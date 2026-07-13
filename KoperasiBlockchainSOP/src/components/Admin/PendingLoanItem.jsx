@@ -47,7 +47,7 @@ const PendingLoanItem = ({ log, loan, onApprove, onReject, onApproveSurvey, onAp
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
       }
-      fetch(`http://localhost:5000/api/loan/details/${peminjam}`, { headers })
+      fetch(`${window.API_BASE}/api/loan/details/${peminjam}`, { headers })
         .then(res => {
           if (res.status === 401) {
             const activeAddr = window.ethereum?.selectedAddress;

@@ -113,7 +113,7 @@ export const useWallet = () => {
 
       // [SECURITY] Kirim signature ke backend untuk mendapatkan JWT session token
       try {
-        const authRes = await fetch('http://localhost:5000/api/auth/login', {
+        const authRes = await fetch(window.API_BASE + '/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ address: addr, message, signature })

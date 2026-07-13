@@ -207,7 +207,7 @@ const UserPage = () => {
         if (token) {
           headers['Authorization'] = `Bearer ${token}`;
         }
-        const res = await fetch(`http://localhost:5000/api/payment/verify/${extId}`, { headers });
+        const res = await fetch(`${window.API_BASE}/api/payment/verify/${extId}`, { headers });
         const data = await res.json();
         if (data.success && (data.status === 'PAID' || data.status === 'SETTLED')) {
           // Payment was actually completed! Advance to blockchain stage

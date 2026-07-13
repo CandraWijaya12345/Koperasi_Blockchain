@@ -188,7 +188,7 @@ const fetchIPFSName = async (hash, address = "", accountAddr = null) => {
     return ipfsNameCache[cacheKey];
   }
   try {
-    const res = await authFetch(`http://localhost:5000/api/ipfs/metadata/${hash}/${address}`, {}, accountAddr);
+    const res = await authFetch(`${window.API_BASE}/api/ipfs/metadata/${hash}/${address}`, {}, accountAddr);
     if (res.ok) {
       const data = await res.json();
       const nama = data.nama || "";
@@ -215,7 +215,7 @@ const decryptTextAPI = async (encryptedText, accountAddr = null) => {
     return decryptionCache[encryptedText];
   }
   try {
-    const res = await authFetch('http://localhost:5000/api/crypto/decrypt', {
+    const res = await authFetch(window.API_BASE + '/api/crypto/decrypt', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: encryptedText })
@@ -966,7 +966,7 @@ export const useKoperasi = (account) => {
       let midtransBal = '0';
       let adminPol = '0';
       try {
-        const res = await authFetch('http://localhost:5000/api/balance', {}, account);
+        const res = await authFetch(window.API_BASE + '/api/balance', {}, account);
         const data = await res.json();
         if (data.success) {
           midtransBal = data.balance;
@@ -1089,7 +1089,7 @@ export const useKoperasi = (account) => {
     try {
       if (onProgress) onProgress("Mengupdate pengaturan global (Zero Gas)...");
       console.log("[Admin] DIAGNOSTIC: Sending Payload to Server:", JSON.stringify({ params }));
-      const response = await authFetch('http://localhost:5000/api/gov/update-settings', {
+      const response = await authFetch(window.API_BASE + '/api/gov/update-settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ params })
@@ -1183,7 +1183,7 @@ export const useKoperasi = (account) => {
   const closeMembership = async (memberAddress, onProgress) => {
     try {
       if (onProgress) onProgress("Menutup keanggotaan (Zero Gas)...");
-      const response = await authFetch('http://localhost:5000/api/admin/close-membership', {
+      const response = await authFetch(window.API_BASE + '/api/admin/close-membership', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ memberAddress })
@@ -1202,7 +1202,7 @@ export const useKoperasi = (account) => {
   const approveSurvey = async (loanId, note, onProgress) => {
     try {
       if (onProgress) onProgress('Memproses Persetujuan Survey (Admin)...');
-      const response = await authFetch('http://localhost:5000/api/loan/survey', {
+      const response = await authFetch(window.API_BASE + '/api/loan/survey', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ loanId, note })
@@ -1219,7 +1219,7 @@ export const useKoperasi = (account) => {
   const approveCommittee = async (loanId, onProgress) => {
     try {
       if (onProgress) onProgress('Memproses Persetujuan Komite (Admin)...');
-      const response = await authFetch('http://localhost:5000/api/loan/committee', {
+      const response = await authFetch(window.API_BASE + '/api/loan/committee', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ loanId })
@@ -1236,7 +1236,7 @@ export const useKoperasi = (account) => {
   const generateMonthlyBills = async (amount, onProgress) => {
     try {
       if (onProgress) onProgress('Menghasilkan tagihan bulanan massal...');
-      const response = await authFetch('http://localhost:5000/api/gov/generate-bills', {
+      const response = await authFetch(window.API_BASE + '/api/gov/generate-bills', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount })
@@ -1254,7 +1254,7 @@ export const useKoperasi = (account) => {
   const releaseProfitSharing = async (percentage, onProgress) => {
     try {
       if (onProgress) onProgress(`Membagikan SHU ${percentage}%...`);
-      const response = await authFetch('http://localhost:5000/api/gov/release-sharing', {
+      const response = await authFetch(window.API_BASE + '/api/gov/release-sharing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ percentage })
@@ -1271,7 +1271,7 @@ export const useKoperasi = (account) => {
 
   const fetchSystemStatus = async () => {
     try {
-      const res = await authFetch('http://localhost:5000/api/health', {}, account);
+      const res = await authFetch(window.API_BASE + '/api/health', {}, account);
       const data = await res.json();
       if (data) {
         setSystemStatus({
@@ -1297,7 +1297,7 @@ export const useKoperasi = (account) => {
 
   const confirmWebhookUpdate = async (url) => {
     try {
-      const res = await authFetch('http://localhost:5000/api/health/confirm-webhook', {
+      const res = await authFetch(window.API_BASE + '/api/health/confirm-webhook', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url })
@@ -1701,7 +1701,7 @@ export const useKoperasi = (account) => {
       if (onProgress) onProgress('Memproses pendaftaran...');
       // 1. Simpan Pending ke Server (agar data tidak hilang jika tab tertutup)
       console.log("[Daftar] Saving pending reg to server for:", account);
-      const res = await authFetch('http://localhost:5000/api/register', {
+      const res = await authFetch(window.API_BASE + '/api/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ params })
@@ -1738,7 +1738,7 @@ export const useKoperasi = (account) => {
       if (onProgress) onProgress('Membuat Invoice Xendit...');
 
       // 1. Create Invoice via Backend
-      const response = await authFetch('http://localhost:5000/api/payment/create', {
+      const response = await authFetch(window.API_BASE + '/api/payment/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1882,7 +1882,7 @@ export const useKoperasi = (account) => {
       // NEW: Save Bank Details to Server
       if (onProgress) onProgress('Menyimpan detail pencairan...');
       try {
-        await authFetch('http://localhost:5000/api/loan/save-details', {
+        await authFetch(window.API_BASE + '/api/loan/save-details', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1923,7 +1923,7 @@ export const useKoperasi = (account) => {
       if (onProgress) onProgress('Membuat Invoice Xendit untuk Angsuran...');
 
       // 1. Create Xendit Invoice for Repayment
-      const response = await authFetch('http://localhost:5000/api/payment/repay', {
+      const response = await authFetch(window.API_BASE + '/api/payment/repay', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2038,7 +2038,7 @@ export const useKoperasi = (account) => {
 
       if (onProgress) onProgress('Mengirim permintaan penarikan (Zero Gas)...');
 
-      const response = await authFetch('http://localhost:5000/api/withdraw', {
+      const response = await authFetch(window.API_BASE + '/api/withdraw', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2074,7 +2074,7 @@ export const useKoperasi = (account) => {
       if (onProgress) onProgress('Memeriksa likuiditas koperasi...');
       const loanData = await koperasiContract.dataPinjaman(idStr);
 
-      const res = await authFetch('http://localhost:5000/api/balance', {}, account);
+      const res = await authFetch(window.API_BASE + '/api/balance', {}, account);
       const data = await res.json();
 
       // Safety check: if server is old or returns invalid data
@@ -2104,7 +2104,7 @@ export const useKoperasi = (account) => {
       // 2. Execute Approval & Disbursement via Server
       if (onProgress) onProgress('Memproses Persetujuan & Pencairan...');
 
-      const response = await authFetch('http://localhost:5000/api/loan/approve-disburse', {
+      const response = await authFetch(window.API_BASE + '/api/loan/approve-disburse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2136,7 +2136,7 @@ export const useKoperasi = (account) => {
     try {
       if (onProgress) onProgress('Mengirim penolakan ke server (Zero Gas)...');
 
-      const response = await authFetch('http://localhost:5000/api/loan/reject', {
+      const response = await authFetch(window.API_BASE + '/api/loan/reject', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2166,7 +2166,7 @@ export const useKoperasi = (account) => {
     const token = localStorage.getItem(`auth_token_${addr}`);
     if (!token) return;
     try {
-      const res = await authFetch('http://localhost:5000/api/balance', {}, account);
+      const res = await authFetch(window.API_BASE + '/api/balance', {}, account);
       const data = await res.json();
 
       if (data.success) {
@@ -2187,7 +2187,7 @@ export const useKoperasi = (account) => {
 
       if (onProgress) onProgress('Meminta Server untuk Sinkronisasi...');
 
-      const response = await authFetch('http://localhost:5000/api/sync-liquidity', {
+      const response = await authFetch(window.API_BASE + '/api/sync-liquidity', {
         method: 'POST'
       }, account);
       const syncData = await response.json();

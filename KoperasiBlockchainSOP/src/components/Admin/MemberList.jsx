@@ -78,7 +78,7 @@ const MemberDetailModal = ({ member, onClose, allLogs, onCloseMembership }) => {
     if (!photoHash) return '';
     if (photoHash.startsWith('http')) return photoHash;
     const token = getAuthToken();
-    return `http://localhost:5000/api/ipfs/photo/${member.profileHash}/${member.address}${token ? `?token=${token}` : ''}`;
+    return `${window.API_BASE}/api/ipfs/photo/${member.profileHash}/${member.address}${token ? `?token=${token}` : ''}`;
   };
 
   React.useEffect(() => {
@@ -92,7 +92,7 @@ const MemberDetailModal = ({ member, onClose, allLogs, onCloseMembership }) => {
           if (token) {
             headers['Authorization'] = `Bearer ${token}`;
           }
-          const res = await fetch(`http://localhost:5000/api/ipfs/metadata/${member.profileHash}/${userAddress}`, { headers });
+          const res = await fetch(`${window.API_BASE}/api/ipfs/metadata/${member.profileHash}/${userAddress}`, { headers });
           if (res.status === 401) {
             const activeAddr = window.ethereum?.selectedAddress;
             if (activeAddr) {
